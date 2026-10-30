@@ -6,7 +6,7 @@
     "build": "vp build",
     "serve": "vp preview",
     "check-types": "vp build && tsc --noEmit",
-    "dev:bare": "vp dev",
+    "dev": "vp dev",
     "env:generate": "varlock codegen"
   },
   "dependencies": {

@@ -22,7 +22,7 @@
   },
   "type": "module",
   "scripts": {
-    "dev": "vp run -r dev",
+    "dev": "vp run --parallel --filter web --filter @convex-vapi/backend dev",
     "build": "vp run -r build",
     "check-types": "vp run -r check-types",
     "check": "vp check && vp run -r check-types",
@@ -30,7 +30,7 @@
     "format": "vp fmt",
     "staged": "vp staged",
     "hooks:setup": "vp config",
-    "dev:web": "vp run --filter web dev:bare",
+    "dev:web": "vp run --filter web dev",
     "dev:server": "vp run --filter @convex-vapi/backend dev",
     "dev:setup": "vp run --filter @convex-vapi/backend dev:setup",
     "deploy": "vp run --filter @convex-vapi/infra deploy",
