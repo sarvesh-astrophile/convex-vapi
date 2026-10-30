@@ -3,6 +3,9 @@ import { Link } from "@tanstack/react-router";
 export default function Header() {
   const links = [
     { to: "/", label: "Home" },
+    { to: "/agents", label: "Agents" },
+    { to: "/voice", label: "Voice" },
+    { to: "/calls", label: "Calls" },
     { to: "/dashboard", label: "Dashboard" },
   ] as const;
 

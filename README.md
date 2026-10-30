@@ -20,6 +20,45 @@ First, install the dependencies:
 bun install
 ```
 
+## Voice Agent (Vapi)
+
+The app includes a browser voice agent using the Vapi Web SDK. Audio runs over
+Vapi's WebRTC transport; call records, transcripts, summaries, and costs sync
+into Convex through a signed Vapi webhook and update reactively.
+
+There is also a workspace-scoped **agent builder** at `/agents`: create an
+assistant, version its prompt/model/voice/transcriber, publish it to Vapi, and
+test it with the browser microphone. The builder includes a Convex Agent-backed
+copilot, rate limiting, and per-version publish state.
+
+See [docs/voice-agent-builder.md](docs/voice-agent-builder.md) for the builder
+setup, schema, components, and publish flow.
+
+### Basic web call setup
+
+1. Create an assistant in the Vapi dashboard and copy its **public key** and
+   **assistant ID**.
+2. Add them to `apps/web/.env` as `VITE_VAPI_PUBLIC_KEY` and
+   `VITE_VAPI_ASSISTANT_ID`.
+3. Set a webhook secret on the Convex deployment:
+
+   ```bash
+   cd packages/backend
+   bunx convex env set VAPI_WEBHOOK_SECRET "whsec_$(openssl rand -hex 24)"
+   ```
+
+4. Point the assistant's `server.url` at
+   `https://<deployment>.convex.site/webhooks/vapi`, set `server.secret` to the
+   same value, and enable `status-update` and `end-of-call-report` server
+   messages.
+5. Open `/voice` after `bun run dev`.
+
+For the builder, also set `VAPI_API_KEY` on the Convex deployment. The copilot
+uses the Convex AI Gateway, so it needs no separate OpenAI key — but the Convex
+team must have AI Gateway access (paid plan). See
+[docs/voice-agent-builder.md](docs/voice-agent-builder.md) and
+[docs/vapi-voice-agent.md](docs/vapi-voice-agent.md).
+
 ## Convex Setup
 
 This project uses Convex as a backend. You'll need to set up Convex before running the app:
