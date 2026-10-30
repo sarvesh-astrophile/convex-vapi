@@ -1,0 +1,58 @@
+{
+  "name": "convex-vapi",
+  "private": true,
+  "workspaces": {
+    "packages": [
+      "apps/*",
+      "packages/*"
+    ],
+    "catalog": {
+      "zod": "^4.5.4",
+      "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
+      "typescript": "^6.0.3",
+      "@types/node": "^26.4.1",
+      "varlock": "1.23.0",
+      "next-themes": "^0.4.6",
+      "sonner": "^2.0.8",
+      "tailwindcss": "^4.3.3",
+      "convex": "^1.48.0",
+      "better-auth": "1.6.17",
+      "@convex-dev/better-auth": "^0.12.5"
+    }
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vp run -r dev",
+    "build": "vp run -r build",
+    "check-types": "vp run -r check-types",
+    "check": "vp check && vp run -r check-types",
+    "lint": "vp lint",
+    "format": "vp fmt",
+    "staged": "vp staged",
+    "hooks:setup": "vp config",
+    "dev:web": "vp run --filter web dev:bare",
+    "dev:server": "vp run --filter @convex-vapi/backend dev",
+    "dev:setup": "vp run --filter @convex-vapi/backend dev:setup",
+    "deploy": "vp run --filter @convex-vapi/infra deploy",
+    "destroy": "vp run --filter @convex-vapi/infra destroy",
+    "env:generate": "varlock codegen --path ./apps/web/",
+    "postinstall": "varlock codegen --path ./apps/web/"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260906.1",
+    "@convex-vapi/config": "workspace:*",
+    "@types/node": "catalog:",
+    "rolldown": "1.2.15",
+    "typescript": "catalog:",
+    "varlock": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "1.4.0"
+  },
+  "overrides": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0"
+  },
+  "packageManager": "bun@1.4.2"
+}

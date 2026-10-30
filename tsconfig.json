@@ -1,0 +1,3 @@
+{
+  "extends": "@convex-vapi/config/tsconfig.base.json"
+}
