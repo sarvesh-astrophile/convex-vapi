@@ -32,16 +32,66 @@ type StoredTurn = {
   timestamp: number;
 };
 
+const GREETING_PREFIXES = ["नमस्ते", "नमस्कार", "हाय", "hello", "hi", "hey"];
+
+/**
+ * Sarvam-105B tends to start every turn with a greeting even when the system
+ * prompt says not to. Strip it from later turns so the spoken reply and the
+ * persisted transcript stay conversational.
+ */
+async function* stripLeadingGreeting(stream: AsyncIterable<string>): AsyncGenerator<string> {
+  let buffer = "";
+  let decided = false;
+
+  for await (const chunk of stream) {
+    if (decided) {
+      yield chunk;
+      continue;
+    }
+
+    buffer += chunk;
+    if (buffer.trim().length < 15 && !/[,.!?।\n]/.test(buffer)) {
+      continue;
+    }
+
+    decided = true;
+    const stripped = removeGreeting(buffer);
+    if (stripped.length > 0) {
+      yield stripped;
+    }
+  }
+
+  if (!decided) {
+    const stripped = removeGreeting(buffer);
+    if (stripped.length > 0) yield stripped;
+  }
+}
+
+function removeGreeting(text: string): string {
+  let output = text.trimStart();
+  for (const prefix of GREETING_PREFIXES) {
+    if (output.toLowerCase().startsWith(prefix)) {
+      output = output.slice(prefix.length).replace(/^[\s,.!?।,:;-]+/, "");
+      break;
+    }
+  }
+  return output;
+}
+
 function buildSystemPrompt(config: LoadedAgentConfig): string {
   return `${config.config.systemPrompt}
 
 You are "${config.name}".
-Conversation rules:
-- The first assistant message already greeted the caller. Do not greet again.
-- Do not introduce yourself unless the caller asks who they are speaking to. If asked, say you are "${config.name}".
+Conversation rules (follow strictly):
+- The first assistant message already greeted the caller. Never open a later reply with a greeting: no "नमस्ते", "नमस्कार", "hello", "hi", or "hey".
+- Do not introduce yourself unless the caller directly asks who they are speaking to. If asked, answer with your name only once.
 - Use prior turns and the caller's name when relevant.
-- Do not repeat a previous answer verbatim; answer the latest user message.
-- Keep replies to one or two short spoken sentences.`;
+- Do not repeat a previous answer verbatim. Answer the latest user message directly.
+- Keep replies to one or two short spoken sentences.
+
+Example of a correct follow-up:
+User: मेरा नाम सर्वेश है।
+Assistant: बहुत अच्छा, सर्वेश जी। बताइए, मैं क्या मदद कर सकता हूँ?`;
 }
 
 export class SarvamVoiceAgent extends VoiceAgent<Env> {
@@ -141,10 +191,12 @@ export class SarvamVoiceAgent extends VoiceAgent<Env> {
       ],
       temperature: config.config.model.temperature,
       maxOutputTokens: config.config.model.maxTokens,
+      frequencyPenalty: 0.2,
+      presencePenalty: 0.2,
       abortSignal: context.signal,
     });
 
-    return result.stream;
+    return stripLeadingGreeting(result.textStream);
   }
 
   async onCallEnd(): Promise<void> {

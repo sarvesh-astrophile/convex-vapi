@@ -192,6 +192,7 @@ Auth wiring: Better Auth runs as a locally installed Convex component (`convex/b
 - Client code imports `ENV` from `src/env.public.ts`; server-only code imports `src/env.ts`.
 - `packages/infra-web/.env.schema` imports its Convex vars from `apps/web`; `packages/infra-voice/.env.schema` is independent and holds the Sarvam key and voice sync secret. Run Varlock-dependent tools from the owning stack directory.
 - `packages/backend/convex/auth.ts` reads `SITE_URL` and `BETTER_AUTH_SECRET` from the Convex deployment environment. They are not part of `apps/web/.env`; set them with `bunx convex env set` or in the Convex dashboard.
+- The voice runtime's LLM credentials live in `packages/infra-voice/.env`: `OPENAI_API_KEY` for direct OpenAI, or `CLOUDFLARE_AI_GATEWAY_URL` + `CLOUDFLARE_AI_GATEWAY_TOKEN` for OpenAI through Cloudflare AI Gateway. Never bind these into the web app.
 - Better Auth rate limiting uses the local component's `rateLimit` table (`storage: "database"`), so counters survive across Convex workers.
 - Dodo Payments will use `DODO_PAYMENTS_API_KEY`, `DODO_PAYMENTS_ENVIRONMENT`, and `DODO_PAYMENTS_WEBHOOK_SECRET` in the Convex deployment environment when billing is implemented.
 

@@ -6,6 +6,7 @@ export interface Env {
   OPENAI_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
   CLOUDFLARE_AI_GATEWAY_URL?: string;
+  CLOUDFLARE_AI_GATEWAY_TOKEN?: string;
 }
 
 export type Runtime = "vapi" | "cloudflare";

@@ -2,6 +2,7 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Alchemy from "alchemy";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import "varlock/auto-load";
 
 /**
@@ -25,6 +26,15 @@ export default Alchemy.Stack(
         SARVAM_API_KEY: Config.Redacted("SARVAM_API_KEY"),
         VOICE_SYNC_SECRET: Config.Redacted("VOICE_SYNC_SECRET"),
         CONVEX_SITE_URL: Config.String("CONVEX_SITE_URL"),
+        OPENAI_API_KEY: Config.Redacted("OPENAI_API_KEY").pipe(
+          Config.withDefault(Redacted.make("")),
+        ),
+        CLOUDFLARE_AI_GATEWAY_URL: Config.String("CLOUDFLARE_AI_GATEWAY_URL").pipe(
+          Config.withDefault(""),
+        ),
+        CLOUDFLARE_AI_GATEWAY_TOKEN: Config.Redacted("CLOUDFLARE_AI_GATEWAY_TOKEN").pipe(
+          Config.withDefault(Redacted.make("")),
+        ),
       },
       dev: {
         port: 3011,

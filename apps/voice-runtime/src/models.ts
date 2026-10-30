@@ -45,12 +45,44 @@ export function resolveModel(config: ModelConfig, env: Env): LanguageModel {
     if (!env.CLOUDFLARE_AI_GATEWAY_URL) {
       throw new Error("CLOUDFLARE_AI_GATEWAY_URL is not configured");
     }
+    if (!env.OPENAI_API_KEY && !env.CLOUDFLARE_AI_GATEWAY_TOKEN) {
+      throw new Error(
+        "Cloudflare AI Gateway needs OPENAI_API_KEY or an authenticated gateway token (CLOUDFLARE_AI_GATEWAY_TOKEN)",
+      );
+    }
+
+    const baseURL = env.CLOUDFLARE_AI_GATEWAY_URL.replace(/\/$/, "");
+    const headers: Record<string, string> = {};
+    if (env.CLOUDFLARE_AI_GATEWAY_TOKEN) {
+      headers["cf-aig-authorization"] = `Bearer ${env.CLOUDFLARE_AI_GATEWAY_TOKEN}`;
+    }
+
+    // `/compat` expects provider-prefixed model ids; `/openai` expects bare ids.
+    const isCompat = baseURL.endsWith("/compat");
+    const model = isCompat
+      ? config.model.includes("/")
+        ? config.model
+        : `openai/${config.model}`
+      : config.model.replace(/^openai\//, "");
+
     const gateway = createOpenAICompatible({
       name: "cloudflare-gateway",
-      baseURL: env.CLOUDFLARE_AI_GATEWAY_URL,
+      baseURL,
+      // BYOK gateways reject any provider Authorization header. When no
+      // provider key is configured, remove the one the SDK adds and rely on
+      // `cf-aig-authorization` + the stored key.
       apiKey: env.OPENAI_API_KEY ?? "unused",
+      headers,
+      fetch: (input, init) => {
+        if (env.OPENAI_API_KEY) {
+          return fetch(input, init);
+        }
+        const nextHeaders = new Headers(init?.headers);
+        nextHeaders.delete("authorization");
+        return fetch(input, { ...init, headers: nextHeaders });
+      },
     });
-    return gateway(config.model);
+    return gateway(model);
   }
 
   throw new Error(

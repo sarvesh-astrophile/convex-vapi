@@ -68,6 +68,39 @@ model: {
 Changing the model requires saving and publishing a new version. The runtime
 loads the published config at call start.
 
+### OpenAI through Cloudflare AI Gateway
+
+Add the gateway URL and optional auth token to `packages/infra-voice/.env`:
+
+```env
+CLOUDFLARE_AI_GATEWAY_URL=https://gateway.ai.cloudflare.com/v1/<account_id>/<gateway_id>/compat
+OPENAI_API_KEY=...
+# optional, for an authenticated gateway
+CLOUDFLARE_AI_GATEWAY_TOKEN=...
+```
+
+Then set the agent model:
+
+```json
+{
+  "provider": "cloudflare-gateway",
+  "model": "openai/gpt-4o-mini",
+  "temperature": 0.4,
+  "maxTokens": 220
+}
+```
+
+The runtime calls the gateway's OpenAI-compatible `/compat` endpoint, adds
+`cf-aig-authorization` when a token is configured, and uses the OpenAI key as
+the provider credential. The builder has a **Cloudflare AI Gateway** preset.
+
+If the gateway uses **BYOK** (stored keys), leave `OPENAI_API_KEY` empty. The
+runtime removes the provider `Authorization` header and relies on
+`CLOUDFLARE_AI_GATEWAY_TOKEN` plus the stored key.
+
+If you use the provider-specific `/openai` endpoint instead, set the model to
+`gpt-4o-mini` and drop the `openai/` prefix.
+
 ## Environment
 
 `packages/infra-voice/.env`:

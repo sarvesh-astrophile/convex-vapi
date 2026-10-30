@@ -112,6 +112,21 @@ export type ModelPreset = {
 
 export const MODEL_PRESETS: ModelPreset[] = [
   {
+    id: "cloudflare-gateway",
+    label: "Cloudflare AI Gateway",
+    description: "OpenAI GPT-4o mini through AI Gateway",
+    apply: (config) => ({
+      ...config,
+      model: {
+        ...config.model,
+        provider: "cloudflare-gateway",
+        model: "openai/gpt-4o-mini",
+        temperature: 0.4,
+        maxTokens: 220,
+      },
+    }),
+  },
+  {
     id: "balanced",
     label: "Balanced",
     description: "Sarvam-105B with a balanced token budget",
