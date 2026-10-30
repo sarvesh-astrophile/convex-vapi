@@ -80,7 +80,6 @@ function AgentDetailPage() {
         initialName={agent.name}
         initialDescription={agent.description ?? ""}
         initialConfig={currentVersion?.config ?? DEFAULT_AGENT_CONFIG}
-        vapiAssistantId={agent.vapiAssistantId}
         status={agent.status}
       />
 
@@ -89,7 +88,7 @@ function AgentDetailPage() {
           <CardTitle>Versions</CardTitle>
           <CardDescription>
             Every save creates a new immutable configuration version. Publishing marks one as live
-            in Vapi.
+            on the Cloudflare runtime.
           </CardDescription>
         </CardHeader>
         <CardContent>

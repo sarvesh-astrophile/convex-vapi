@@ -1,0 +1,23 @@
+{
+  "name": "@convex-vapi/voice-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cloudflare Agents voice runtime using Sarvam STT/TTS and a selectable LLM.",
+  "type": "module",
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.93",
+    "@ai-sdk/openai": "^4.0.106",
+    "@ai-sdk/openai-compatible": "^3.0.82",
+    "@convex-vapi/sarvam": "workspace:*",
+    "agents": "^0.32.0",
+    "ai": "^7.0.158"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260906.1",
+    "@convex-vapi/config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}

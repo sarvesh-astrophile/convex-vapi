@@ -25,11 +25,15 @@ export const agentConfigValidator = v.object({
   voice: v.object({
     provider: v.string(),
     voiceId: v.string(),
+    model: v.optional(v.string()),
+    language: v.optional(v.string()),
   }),
   transcriber: v.object({
     provider: v.string(),
     model: v.string(),
     language: v.string(),
+    mode: v.optional(v.string()),
+    keyterms: v.optional(v.array(v.string())),
   }),
 });
 
@@ -46,33 +50,39 @@ export type AgentConfig = {
   voice: {
     provider: string;
     voiceId: string;
+    model?: string;
+    language?: string;
   };
   transcriber: {
     provider: string;
     model: string;
     language: string;
+    mode?: string;
+    keyterms?: string[];
   };
 };
 
 export const DEFAULT_AGENT_CONFIG: AgentConfig = {
-  firstMessage: "Hi, how can I help you today?",
+  firstMessage: "नमस्ते! मैं आपकी कैसे मदद कर सकता हूँ?",
   firstMessageMode: "assistant-speaks-first",
   systemPrompt:
-    "You are a helpful voice assistant. Keep answers short and natural for a spoken conversation.",
+    "You are a warm, concise voice assistant. Reply in the caller's language and keep answers short because they are spoken aloud.",
   model: {
-    provider: "openai",
-    model: "gpt-4o-mini",
-    temperature: 0.6,
+    provider: "sarvam",
+    model: "sarvam-105b",
+    temperature: 0.4,
     maxTokens: 220,
   },
   voice: {
-    provider: "11labs",
-    voiceId: "burt",
+    provider: "sarvam",
+    voiceId: "shubh",
+    model: "bulbul:v3",
   },
   transcriber: {
-    provider: "deepgram",
-    model: "nova-3",
-    language: "en",
+    provider: "sarvam",
+    model: "saaras:v4",
+    language: "unknown",
+    mode: "codemix",
   },
 };
 
@@ -99,11 +109,15 @@ export const generatedAgentConfigSchema = z.object({
   voice: z.object({
     provider: z.string().min(1),
     voiceId: z.string().min(1),
+    model: z.string().min(1).optional(),
+    language: z.string().min(1).optional(),
   }),
   transcriber: z.object({
     provider: z.string().min(1),
     model: z.string().min(1),
     language: z.string().min(1),
+    mode: z.string().min(1).optional(),
+    keyterms: z.array(z.string()).max(50).optional(),
   }),
 });
 

@@ -39,7 +39,7 @@ function AgentsPage() {
         <div>
           <h1 className="text-xl font-medium">Agents</h1>
           <p className="text-muted-foreground text-sm">
-            Build assistant configurations in Convex and publish them to Vapi.
+            Build voice agents in Convex and publish them to the Cloudflare runtime.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -70,7 +70,8 @@ function AgentsPage() {
         <CardHeader>
           <CardTitle>Your agents</CardTitle>
           <CardDescription>
-            Drafts are versioned in Convex. Publishing creates or updates the Vapi assistant.
+            Drafts are versioned in Convex. Publishing marks a version live on the Cloudflare
+            runtime.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -108,9 +109,6 @@ function AgentsPage() {
                       </p>
                     </div>
                     <div className="text-muted-foreground flex items-center gap-3 text-xs sm:justify-end">
-                      {agent.vapiAssistantId ? (
-                        <span className="font-mono">{agent.vapiAssistantId}</span>
-                      ) : null}
                       <span className="rounded-full border px-2 py-0.5">{agent.status}</span>
                     </div>
                   </Link>

@@ -33,7 +33,7 @@ function CallsPage() {
           <div>
             <CardTitle>Call history</CardTitle>
             <CardDescription>
-              Every Vapi call belonging to your account, newest first.
+              Every voice call belonging to your account, newest first.
             </CardDescription>
           </div>
           <Link to="/voice" className={buttonVariants({ size: "sm" })}>

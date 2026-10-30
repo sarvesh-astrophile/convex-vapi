@@ -108,7 +108,7 @@ function CallDetailPage() {
           <CardDescription>
             {turns.length > 0
               ? `${turns.length} turns saved from the end-of-call report.`
-              : "No structured turns yet. Vapi sends the transcript with the end-of-call report."}
+              : "No structured turns yet. The voice runtime syncs the transcript when the call ends."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -138,7 +138,7 @@ function CallDetailPage() {
             <pre className="text-sm whitespace-pre-wrap">{call.transcript}</pre>
           ) : (
             <p className="text-muted-foreground py-6 text-center text-sm">
-              The transcript will appear after Vapi sends the end-of-call report.
+              The transcript will appear after the call syncs.
             </p>
           )}
         </CardContent>

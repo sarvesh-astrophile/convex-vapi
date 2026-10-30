@@ -23,8 +23,10 @@ export default Alchemy.Stack(
       env: {
         VITE_CONVEX_URL: Config.String("VITE_CONVEX_URL"),
         VITE_CONVEX_SITE_URL: Config.String("VITE_CONVEX_SITE_URL"),
-        VITE_VAPI_PUBLIC_KEY: Config.String("VITE_VAPI_PUBLIC_KEY"),
-        VITE_VAPI_ASSISTANT_ID: Config.String("VITE_VAPI_ASSISTANT_ID"),
+        VITE_VOICE_RUNTIME_URL: Config.String("VITE_VOICE_RUNTIME_URL").pipe(
+          Config.withDefault(""),
+        ),
+        VITE_VOICE_AGENT_ID: Config.String("VITE_VOICE_AGENT_ID").pipe(Config.withDefault("")),
       },
       dev: {
         port: 3001,

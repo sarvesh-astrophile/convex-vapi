@@ -6,7 +6,6 @@ import { action, internalMutation, internalQuery, mutation, query } from "./_gen
 import { agentConfigValidator, type AgentConfig } from "./lib/agentConfig";
 import { requireWorkspaceMember } from "./lib/workspaceAuth";
 import { rateLimiter } from "./rateLimits";
-import { createVapiAssistant, updateVapiAssistant, type VapiAssistantPayload } from "./vapi/client";
 
 function normalizeName(name: string): string {
   const trimmed = name.trim();
@@ -29,11 +28,23 @@ function normalizeConfig(config: AgentConfig): AgentConfig {
   const voice = {
     provider: config.voice.provider.trim(),
     voiceId: config.voice.voiceId.trim(),
+    ...(config.voice.model ? { model: config.voice.model.trim() } : {}),
+    ...(config.voice.language ? { language: config.voice.language.trim() } : {}),
   };
   const transcriber = {
     provider: config.transcriber.provider.trim(),
     model: config.transcriber.model.trim(),
     language: config.transcriber.language.trim(),
+    ...(config.transcriber.mode ? { mode: config.transcriber.mode.trim() } : {}),
+    ...(config.transcriber.keyterms
+      ? {
+          keyterms: config.transcriber.keyterms
+            .map((term) => term.trim())
+            .filter((term) => term.length > 0)
+            .slice(0, 50)
+            .map((term) => term.slice(0, 64)),
+        }
+      : {}),
   };
 
   if (!model.provider || !model.model || !voice.provider || !voice.voiceId) {
@@ -50,40 +61,6 @@ function normalizeConfig(config: AgentConfig): AgentConfig {
     model,
     voice,
     transcriber,
-  };
-}
-
-function buildVapiPayload(
-  name: string,
-  config: AgentConfig,
-  webhookUrl: string,
-  webhookSecret: string,
-): VapiAssistantPayload {
-  return {
-    name,
-    firstMessage: config.firstMessage,
-    firstMessageMode: config.firstMessageMode ?? "assistant-speaks-first",
-    model: {
-      provider: config.model.provider,
-      model: config.model.model,
-      temperature: config.model.temperature,
-      maxTokens: config.model.maxTokens,
-      messages: [{ role: "system", content: config.systemPrompt }],
-    },
-    voice: {
-      provider: config.voice.provider,
-      voiceId: config.voice.voiceId,
-    },
-    transcriber: {
-      provider: config.transcriber.provider,
-      model: config.transcriber.model,
-      language: config.transcriber.language,
-    },
-    server: {
-      url: webhookUrl,
-      secret: webhookSecret,
-    },
-    serverMessages: ["status-update", "end-of-call-report"],
   };
 }
 
@@ -104,6 +81,7 @@ export const create = mutation({
       workspaceId: args.workspaceId,
       name,
       description: args.description?.trim() || undefined,
+      runtime: "cloudflare",
       status: "draft",
       createdBy: auth.userId,
       createdAt: now,
@@ -250,24 +228,13 @@ export const getForPublish = internalQuery({
       throw new Error("Agent has no configuration to publish");
     }
 
-    const siteUrl = process.env.CONVEX_SITE_URL;
-    const webhookSecret = process.env.VAPI_WEBHOOK_SECRET;
-    if (!siteUrl) {
-      throw new Error("CONVEX_SITE_URL is not configured");
-    }
-    if (!webhookSecret) {
-      throw new Error("VAPI_WEBHOOK_SECRET is not configured");
-    }
-
     return {
       agentId: agent._id,
       workspaceId: agent.workspaceId,
       name: agent.name,
-      vapiAssistantId: agent.vapiAssistantId,
+      runtime: "cloudflare" as const,
       versionId: version._id,
       config: version.config,
-      webhookUrl: `${siteUrl.replace(/\/$/, "")}/webhooks/vapi`,
-      webhookSecret,
     };
   },
 });
@@ -276,7 +243,6 @@ export const markPublished = internalMutation({
   args: {
     agentId: v.id("agents"),
     versionId: v.id("agentVersions"),
-    vapiAssistantId: v.string(),
   },
   handler: async (ctx, args): Promise<null> => {
     const agent = await ctx.db.get("agents", args.agentId);
@@ -287,13 +253,13 @@ export const markPublished = internalMutation({
 
     await ctx.db.patch("agents", args.agentId, {
       status: "published",
-      vapiAssistantId: args.vapiAssistantId,
+      runtime: "cloudflare",
+      publishedRuntime: "cloudflare",
       publishedVersionId: args.versionId,
       updatedAt: now,
     });
 
     await ctx.db.patch("agentVersions", args.versionId, {
-      vapiAssistantId: args.vapiAssistantId,
       publishedAt: now,
     });
 
@@ -303,7 +269,7 @@ export const markPublished = internalMutation({
 
 export const publish = action({
   args: { agentId: v.id("agents") },
-  handler: async (ctx, args): Promise<{ vapiAssistantId: string }> => {
+  handler: async (ctx, args): Promise<{ runtime: "cloudflare"; vapiAssistantId: null }> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
       throw new Error("Unauthenticated");
@@ -319,22 +285,11 @@ export const publish = action({
       throws: true,
     });
 
-    const apiKey = process.env.VAPI_API_KEY;
-    if (!apiKey) {
-      throw new Error("VAPI_API_KEY is not configured on the Convex deployment");
-    }
-
-    const payload = buildVapiPayload(data.name, data.config, data.webhookUrl, data.webhookSecret);
-    const assistant = data.vapiAssistantId
-      ? await updateVapiAssistant(apiKey, data.vapiAssistantId, payload)
-      : await createVapiAssistant(apiKey, payload);
-
     await ctx.runMutation(internal.agents.markPublished, {
       agentId: args.agentId,
       versionId: data.versionId,
-      vapiAssistantId: assistant.id,
     });
 
-    return { vapiAssistantId: assistant.id };
+    return { runtime: "cloudflare", vapiAssistantId: null };
   },
 });

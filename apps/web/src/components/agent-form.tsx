@@ -47,7 +47,6 @@ type AgentFormProps = {
   initialName?: string;
   initialDescription?: string;
   initialConfig: AgentConfig;
-  vapiAssistantId?: string;
   status?: "draft" | "published" | "archived";
 };
 
@@ -187,7 +186,6 @@ export function AgentForm({
   initialName = "",
   initialDescription = "",
   initialConfig,
-  vapiAssistantId,
   status = "draft",
 }: AgentFormProps) {
   const navigate = useNavigate();
@@ -259,7 +257,9 @@ export function AgentForm({
       }
 
       const result = await publishAgent({ agentId: id });
-      toast.success(`Published to Vapi (${result.vapiAssistantId})`);
+      toast.success(
+        result.runtime === "cloudflare" ? "Published to the Cloudflare voice runtime" : "Published",
+      );
 
       if (!agentId) {
         await navigate({ to: "/agents/$agentId", params: { agentId: id } });
@@ -275,7 +275,7 @@ export function AgentForm({
     if (!agentId) {
       return;
     }
-    if (!window.confirm("Archive this agent? The local record and Vapi assistant are kept.")) {
+    if (!window.confirm("Archive this agent? The local record is kept.")) {
       return;
     }
 
@@ -367,6 +367,30 @@ export function AgentForm({
     }
   }
 
+  function applySarvamPreset() {
+    setConfig((current) => ({
+      ...current,
+      model: {
+        provider: "sarvam",
+        model: "sarvam-105b",
+        temperature: 0.4,
+        maxTokens: 220,
+      },
+      transcriber: {
+        provider: "sarvam",
+        model: "saaras:v4",
+        language: current.transcriber.language === "en" ? "en-IN" : "unknown",
+        mode: "codemix",
+      },
+      voice: {
+        provider: "sarvam",
+        voiceId: "shubh",
+        model: "bulbul:v3",
+      },
+    }));
+    toast.success("Sarvam STT/TTS + Sarvam-105B selected");
+  }
+
   return (
     <div className="grid gap-4">
       <Card>
@@ -394,6 +418,20 @@ export function AgentForm({
               placeholder="Answers pricing questions for inbound calls"
             />
           </div>
+          <div className="grid gap-2 md:col-span-2">
+            <Label>Runtime</Label>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full border px-3 py-1 text-xs">
+                Cloudflare voice runtime + Sarvam
+              </span>
+              <Button type="button" variant="ghost" onClick={applySarvamPreset}>
+                <Sparkles /> Use Sarvam stack
+              </Button>
+            </div>
+            <p className="text-muted-foreground text-[11px]">
+              Agents run on the Cloudflare voice runtime with Sarvam STT/TTS and the selected LLM.
+            </p>
+          </div>
         </CardContent>
       </Card>
 
@@ -416,7 +454,7 @@ export function AgentForm({
         <div className="flex flex-wrap items-center gap-2 px-3 pb-3">
           <span
             className="text-muted-foreground shrink-0 text-xs font-medium underline decoration-dotted underline-offset-4"
-            title="Presets only change builder settings; publish to apply them in Vapi"
+            title="Presets only change builder settings; publish to apply them on the runtime"
           >
             Model Presets
           </span>
@@ -482,7 +520,9 @@ export function AgentForm({
                     ? "Model settings"
                     : "Voice settings"}
               </CardTitle>
-              <CardDescription>These values are sent to Vapi when you publish.</CardDescription>
+              <CardDescription>
+                These values are sent to the voice runtime when you publish.
+              </CardDescription>
             </div>
             <Button type="button" variant="ghost" size="sm" onClick={() => setActiveEditor(null)}>
               Done
@@ -754,7 +794,7 @@ export function AgentForm({
                 <FileText />
               </Button>
               <p className="text-muted-foreground text-[11px]">
-                File-backed knowledge is not wired to Vapi yet.
+                File-backed knowledge is not wired to the voice runtime yet.
               </p>
             </CardContent>
           </Card>
@@ -818,20 +858,20 @@ export function AgentForm({
           disabled={isSaving || isPublishing}
         >
           {isPublishing ? <Loader2 className="animate-spin" /> : <Upload />}
-          Publish to Vapi
+          Publish
         </Button>
-        {vapiAssistantId ? (
+        {agentId ? (
           <Link
             to="/voice"
-            search={{ assistant: vapiAssistantId }}
+            search={{ agent: agentId }}
             className={buttonVariants({ variant: "outline" })}
           >
             <ExternalLink /> Test call
           </Link>
         ) : null}
-        {vapiAssistantId ? (
+        {agentId ? (
           <span className="text-muted-foreground hidden font-mono text-[11px] md:inline">
-            {vapiAssistantId}
+            {agentId}
           </span>
         ) : null}
         <div className="ml-auto flex items-center gap-2">

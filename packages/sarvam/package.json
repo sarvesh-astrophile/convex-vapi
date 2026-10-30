@@ -1,0 +1,15 @@
+{
+  "name": "@convex-vapi/sarvam",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sarvam streaming STT/TTS clients shared by the Vapi bridge and the Cloudflare voice runtime.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260906.1",
+    "@convex-vapi/config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}

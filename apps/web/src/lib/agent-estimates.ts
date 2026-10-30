@@ -76,9 +76,9 @@ export function estimateAgent(config: AgentConfig): {
   const hosting: EstimatedComponent = {
     key: "hosting",
     label: "Hosting",
-    provider: "Vapi",
-    name: "Vapi",
-    costPerMinute: 0.05,
+    provider: "Cloudflare",
+    name: "Workers + DO",
+    costPerMinute: 0.01,
     latencyMs: 0,
     colorClass: "bg-slate-500",
   };
@@ -114,13 +114,13 @@ export const MODEL_PRESETS: ModelPreset[] = [
   {
     id: "balanced",
     label: "Balanced",
-    description: "GPT-4o mini with Deepgram and ElevenLabs",
+    description: "Sarvam-105B with a balanced token budget",
     apply: (config) => ({
       ...config,
       model: {
         ...config.model,
-        provider: "openai",
-        model: "gpt-4o-mini",
+        provider: "sarvam",
+        model: "sarvam-105b",
         temperature: 0.6,
         maxTokens: 220,
       },
@@ -129,13 +129,13 @@ export const MODEL_PRESETS: ModelPreset[] = [
   {
     id: "high-intelligence",
     label: "High Intelligence",
-    description: "GPT-4o with lower temperature",
+    description: "Sarvam-105B with lower temperature",
     apply: (config) => ({
       ...config,
       model: {
         ...config.model,
-        provider: "openai",
-        model: "gpt-4o",
+        provider: "sarvam",
+        model: "sarvam-105b",
         temperature: 0.4,
         maxTokens: 320,
       },
@@ -144,13 +144,13 @@ export const MODEL_PRESETS: ModelPreset[] = [
   {
     id: "ultra-fast",
     label: "Ultra Fast",
-    description: "Short answers with GPT-4o mini",
+    description: "Short answers with a smaller token budget",
     apply: (config) => ({
       ...config,
       model: {
         ...config.model,
-        provider: "openai",
-        model: "gpt-4o-mini",
+        provider: "sarvam",
+        model: "sarvam-105b",
         temperature: 0.3,
         maxTokens: 150,
       },
@@ -159,13 +159,13 @@ export const MODEL_PRESETS: ModelPreset[] = [
   {
     id: "cost-saver",
     label: "Cost Saver",
-    description: "Lower token budget on GPT-4o mini",
+    description: "Lowest token budget",
     apply: (config) => ({
       ...config,
       model: {
         ...config.model,
-        provider: "openai",
-        model: "gpt-4o-mini",
+        provider: "sarvam",
+        model: "sarvam-105b",
         temperature: 0.5,
         maxTokens: 160,
       },

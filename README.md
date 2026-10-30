@@ -20,53 +20,62 @@ First, install the dependencies:
 bun install
 ```
 
-## Voice Agent (Vapi)
+## Voice Agent (Cloudflare + Sarvam)
 
-The app includes a browser voice agent using the Vapi Web SDK. Audio runs over
-Vapi's WebRTC transport; call records, transcripts, summaries, and costs sync
-into Convex through a signed Vapi webhook and update reactively.
+The voice runtime is a Cloudflare Worker using `agents/voice`. Each call runs in
+a Durable Object with:
 
-There is also a workspace-scoped **agent builder** at `/agents`: create an
-assistant, version its prompt/model/voice/transcriber, publish it to Vapi, and
-test it with the browser microphone. The builder includes a Convex Agent-backed
-copilot, rate limiting, and per-version publish state.
+- **STT:** Sarvam Saaras v4 over WebSocket
+- **TTS:** Sarvam Bulbul
+- **LLM:** per-agent, selectable (`sarvam`, `openai`, `anthropic`, or a
+  Cloudflare/OpenAI-compatible gateway)
+- **Persistence:** live transcript in Durable Object SQLite, synced to Convex
+  when the call ends
+
+The workspace-scoped builder at `/agents` versions the prompt, model, voice,
+and transcriber, then publishes to the Cloudflare runtime. The copilot still
+uses the Convex AI Gateway.
 
 See [docs/voice-agent-builder.md](docs/voice-agent-builder.md) for the builder
-setup, schema, components, and publish flow.
+and [docs/cloudflare-voice-runtime.md](docs/cloudflare-voice-runtime.md) for the
+runtime.
 
-### Basic web call setup
+### Setup
 
-1. Create an assistant in the Vapi dashboard and copy its **public key** and
-   **assistant ID**.
-2. Add them to `apps/web/.env` as `VITE_VAPI_PUBLIC_KEY` and
-   `VITE_VAPI_ASSISTANT_ID`.
-3. Set a webhook secret on the Convex deployment:
+1. Add Sarvam and sync secrets to `packages/infra-voice/.env`:
+
+   ```env
+   SARVAM_API_KEY=...
+   VOICE_SYNC_SECRET=...
+   CONVEX_SITE_URL=https://<deployment>.convex.site
+   ```
+
+2. Set the same sync secret on Convex:
 
    ```bash
    cd packages/backend
-   bunx convex env set VAPI_WEBHOOK_SECRET "whsec_$(openssl rand -hex 24)"
+   bunx convex env set VOICE_SYNC_SECRET "<same value>"
    ```
 
-4. Point the assistant's `server.url` at
-   `https://<deployment>.convex.site/webhooks/vapi`, set `server.secret` to the
-   same value, and enable `status-update` and `end-of-call-report` server
-   messages.
-5. Open `/voice` after `bun run dev`.
+3. Deploy the runtime, or run it locally:
 
-For the builder, also set `VAPI_API_KEY` on the Convex deployment. The copilot
-uses the Convex AI Gateway, so it needs no separate OpenAI key — but the Convex
-team must have AI Gateway access (paid plan). See
-[docs/voice-agent-builder.md](docs/voice-agent-builder.md) and
-[docs/vapi-voice-agent.md](docs/vapi-voice-agent.md).
+   ```bash
+   bun run deploy:voice
+   # or
+   bun run dev:infra:voice
+   ```
 
-### Sarvam speech-to-text and text-to-speech
+4. Point the web app at it:
 
-Sarvam runs through a Cloudflare Worker bridge that implements Vapi's
-`custom-transcriber` WebSocket protocol and `custom-voice` HTTP protocol. It
-runs Saaras v4 on the customer audio channel, Bulbul for the assistant voice,
-and can fall back to Deepgram/Vapi if Sarvam is unavailable. Deploy it with
-`bun run deploy:bridge` and sign per-assistant transcriber and voice URLs. See
-[docs/sarvam-stt-bridge.md](docs/sarvam-stt-bridge.md).
+   ```env
+   VITE_VOICE_RUNTIME_URL=https://<voice-worker>
+   VITE_VOICE_AGENT_ID=<optional default agent id>
+   ```
+
+5. Open an agent in the builder, choose **Use Sarvam stack**, publish, and
+   click **Test call**.
+
+No external voice-platform key or assistant is required.
 
 ## Convex Setup
 
@@ -131,17 +140,17 @@ Run standalone Node/Bun tools that use Varlock from the owning app directory so 
 
 ### Alchemy
 
-- Target: web on Cloudflare
+- Target: web + voice runtime on Cloudflare
 - Configure provider accounts: `cd packages/infra-web && bunx alchemy profile edit`
 - Dev: bun run dev
 - Deploy web: bun run deploy:web
-- Deploy Sarvam bridge: bun run deploy:bridge
+- Deploy voice runtime: bun run deploy:voice
 - Deploy both: bun run deploy
 - Destroy: bun run destroy
 
 Each stack has its own schema and state: `packages/infra-web` for the web
-worker and `packages/infra-sarvam-bridge` for the Sarvam STT Worker. The bridge
-is also available during local emulation with `bun run dev:infra:bridge`.
+worker and `packages/infra-voice` for the voice runtime. The runtime is also
+available during local emulation with `bun run dev:infra:voice`.
 
 `alchemy profile edit` stores the selected Axiom, Cloudflare, Neon, PlanetScale, and/or Prisma provider profiles under `~/.alchemy`; no provider-specific setup command is required by this scaffold.
 
@@ -149,7 +158,7 @@ Deploys are staged and default to a personal `dev_<username>` stage. For product
 
 ```bash
 cd packages/infra-web && bunx alchemy deploy --stage production
-cd packages/infra-sarvam-bridge && bunx alchemy deploy --stage production
+cd packages/infra-voice && bunx alchemy deploy --stage production
 ```
 
 ## Git Hooks and Formatting
@@ -163,13 +172,14 @@ cd packages/infra-sarvam-bridge && bunx alchemy deploy --stage production
 ```
 convex-vapi/
 ├── apps/
-│   ├── web/         # Frontend application (React + TanStack Start)
-│   ├── sarvam-bridge/ # Vapi custom-transcriber → Sarvam Worker
+│   ├── web/           # Frontend application (React + TanStack Start)
+│   ├── voice-runtime/ # Cloudflare Agents voice runtime + Sarvam adapters
 ├── packages/
-│   ├── ui/          # Shared shadcn/ui components and styles
-│   ├── backend/     # Convex backend functions and schema
-│   ├── infra-web/   # Alchemy stack for the web worker
-│   ├── infra-sarvam-bridge/ # Alchemy stack for the STT bridge
+│   ├── ui/            # Shared shadcn/ui components and styles
+│   ├── backend/       # Convex backend functions and schema
+│   ├── sarvam/        # Shared Sarvam STT/TTS clients
+│   ├── infra-web/     # Alchemy stack for the web worker
+│   ├── infra-voice/   # Alchemy stack for the voice runtime
 ```
 
 ## Available Scripts
@@ -179,8 +189,8 @@ convex-vapi/
 - `bun run dev:web`: Start only the web application
 - `bun run dev:setup`: Setup and configure your Convex project
 - `bun run dev:infra:web`: Run the web stack in Cloudflare local emulation
-- `bun run dev:infra:bridge`: Run the Sarvam bridge Worker locally
-- `bun run deploy:web` / `bun run deploy:bridge`: Deploy one stack
+- `bun run dev:infra:voice`: Run the voice runtime Worker locally
+- `bun run deploy:web` / `bun run deploy:voice`: Deploy one stack
 - `bun run deploy`: Deploy both stacks
 - `bun run check-types`: Check TypeScript types across all apps
 - `bun run check`: Run Vite+ format/lint checks and workspace TypeScript checks

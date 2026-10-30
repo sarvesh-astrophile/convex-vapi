@@ -12,7 +12,7 @@ const builderAgent = new Agent(components.agent, {
   name: "Builder Copilot",
   languageModel: convexGateway("openai/gpt-4o-mini"),
   instructions:
-    "You help product builders design Vapi voice assistants. Suggest concise system prompts, first messages, model settings, voice/transcriber choices, and tool schemas. Return practical copy-pasteable text. Do not invent Vapi API endpoints or fields.",
+    "You help product builders design Sarvam voice agents running on Cloudflare Agents. Suggest concise system prompts, first messages, LLM settings, Sarvam voice/transcriber choices, and tool schemas. Return practical text. Do not invent Cloudflare or Sarvam API endpoints.",
 });
 
 function throwCopilotError(error: unknown): never {
@@ -166,7 +166,7 @@ export const chat = action({
         ctx,
         { threadId, userId: identity.subject },
         {
-          prompt: `You are helping configure a Vapi voice assistant.${context}\n\nUser request:\n${prompt}\n\nAnswer with concrete suggested text or settings. Keep it under 300 words.`,
+          prompt: `You are helping configure a Sarvam voice agent running on Cloudflare Agents.${context}\n\nUser request:\n${prompt}\n\nAnswer with concrete suggested text or settings. Keep it under 300 words.`,
         },
       );
     } catch (error) {
@@ -218,13 +218,13 @@ export const generateConfig = action({
         { userId: identity.subject },
         {
           output: Output.object({ schema: generatedAgentConfigSchema }),
-          prompt: `Create a complete, publishable Vapi voice assistant configuration.
+          prompt: `Create a complete, publishable Sarvam voice-agent configuration.
 
 Requirements:
-- Use valid Vapi identifiers. Default model: openai/gpt-4o-mini. Default voice: 11labs/burt. Default transcriber: deepgram/nova-3/en. Only deviate when the user asks for a specific provider or language.
-- The systemPrompt must be ready to paste into Vapi: role, tone, constraints, escalation behavior, and when to end the call.
+- Default model: sarvam/sarvam-105b. Default voice: sarvam/shubh with model bulbul:v3. Default transcriber: sarvam/saaras:v4 with language unknown and mode codemix. Only deviate when the user asks for a specific provider or language.
+- The systemPrompt must be ready for a spoken agent: role, tone, constraints, escalation behavior, and when to end the call.
 - The firstMessage must sound natural when spoken.
-- If the brief asks for multiple languages, set the transcriber language to 'multi' or the primary language and make the systemPrompt explicitly handle both languages.
+- If the brief asks for multiple languages, use transcriber mode 'codemix' or 'translit' and make the systemPrompt explicitly handle both languages.
 - Keep the systemPrompt focused and under 400 words.
 - The name and description must be short and human-readable.
 ${context}

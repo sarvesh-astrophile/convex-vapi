@@ -1,4 +1,5 @@
 import { api } from "@convex-vapi/backend/convex/_generated/api";
+import type { Id } from "@convex-vapi/backend/convex/_generated/dataModel";
 import { Button, buttonVariants } from "@convex-vapi/ui/components/button";
 import {
   Card,
@@ -13,13 +14,14 @@ import { Loader2, Mic, MicOff, Phone, PhoneOff } from "lucide-react";
 
 import { ENV } from "@/env.public";
 import { useActiveWorkspace } from "@/hooks/use-active-workspace";
-import { useVapiCall, type ConnectionState, type LiveTurn } from "@/hooks/use-vapi-call";
+import { useCloudflareVoice } from "@/hooks/use-cloudflare-voice";
 import { formatCost, formatTimestamp } from "@/lib/format";
+import type { ConnectionState, LiveTurn } from "@/lib/voice-types";
 
 export const Route = createFileRoute("/_auth/voice")({
-  validateSearch: (search: Record<string, unknown>): { assistant?: string } => {
-    if (typeof search.assistant === "string" && search.assistant.length > 0) {
-      return { assistant: search.assistant };
+  validateSearch: (search: Record<string, unknown>): { agent?: string } => {
+    if (typeof search.agent === "string" && search.agent.length > 0) {
+      return { agent: search.agent };
     }
     return {};
   },
@@ -70,14 +72,25 @@ function TurnBubble({ turn }: { turn: LiveTurn }) {
 }
 
 function VoicePage() {
-  const { assistant } = Route.useSearch();
-  const assistantId = assistant && assistant.length > 0 ? assistant : ENV.VITE_VAPI_ASSISTANT_ID;
-  const { workspace } = useActiveWorkspace();
-  const call = useVapiCall(ENV.VITE_VAPI_PUBLIC_KEY, assistantId, workspace?._id);
+  const { agent } = Route.useSearch();
+  const agentId = agent && agent.length > 0 ? agent : ENV.VITE_VOICE_AGENT_ID;
   const { isAuthenticated } = useConvexAuth();
+  const { workspace } = useActiveWorkspace();
+  const agentDoc = useQuery(
+    api.agents.get,
+    isAuthenticated && agentId ? { agentId: agentId as Id<"agents"> } : "skip",
+  );
+
+  const call = useCloudflareVoice({
+    agentId,
+    workspaceId: agentDoc?.agent.workspaceId,
+    enabled: Boolean(agentId),
+  });
+
+  const callsWorkspaceId = agentDoc?.agent.workspaceId ?? workspace?._id;
   const recentCalls = useQuery(
     api.calls.list,
-    isAuthenticated ? { limit: 8, workspaceId: workspace?._id } : "skip",
+    isAuthenticated ? { limit: 8, workspaceId: callsWorkspaceId } : "skip",
   );
 
   const status = STATUS_LABEL[call.connection];
@@ -85,6 +98,7 @@ function VoicePage() {
     ...call.turns,
     ...(call.partial ? [{ ...call.partial, partial: true }] : []),
   ];
+  const agentName = agentDoc?.agent.name ?? (agentId ? "Loading agent…" : "No agent selected");
 
   return (
     <div className="container mx-auto grid max-w-6xl gap-6 px-4 py-6 lg:grid-cols-[1.4fr_1fr]">
@@ -94,13 +108,12 @@ function VoicePage() {
             <div>
               <CardTitle>Voice agent</CardTitle>
               <CardDescription>
-                {assistant
-                  ? "Browser microphone call against a published builder agent."
-                  : "Browser microphone call powered by Vapi. Transcripts and final reports sync into Convex."}
+                Browser microphone call against a published agent. Audio streams over WebSocket to
+                the Cloudflare voice runtime, with Sarvam STT/TTS and the agent's selected LLM.
               </CardDescription>
-              {assistant ? (
+              {agentId ? (
                 <p className="text-muted-foreground mt-1 font-mono text-[11px]">
-                  Assistant: {assistant}
+                  Agent: {agentName}
                 </p>
               ) : null}
             </div>
@@ -113,10 +126,11 @@ function VoicePage() {
           <CardContent className="grid gap-4">
             {!call.configured ? (
               <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-                <p className="font-medium">Vapi is not configured yet.</p>
+                <p className="font-medium">Cloudflare voice runtime is not configured.</p>
                 <p className="text-muted-foreground mt-1">
-                  Add <code>VITE_VAPI_PUBLIC_KEY</code> and <code>VITE_VAPI_ASSISTANT_ID</code> to{" "}
-                  <code>apps/web/.env</code>, then restart the dev server.
+                  Open an agent and use <strong>Test call</strong>, or set{" "}
+                  <code>VITE_VOICE_RUNTIME_URL</code> and <code>VITE_VOICE_AGENT_ID</code> in{" "}
+                  <code>apps/web/.env</code>.
                 </p>
               </div>
             ) : null}
@@ -129,16 +143,8 @@ function VoicePage() {
 
             <div className="flex flex-wrap items-center gap-2">
               {call.isLive ? (
-                <Button
-                  variant="destructive"
-                  onClick={() => void call.stop()}
-                  disabled={call.connection === "ending"}
-                >
-                  {call.connection === "ending" ? (
-                    <Loader2 className="animate-spin" />
-                  ) : (
-                    <PhoneOff />
-                  )}
+                <Button variant="destructive" onClick={() => void call.stop()}>
+                  <PhoneOff />
                   End call
                 </Button>
               ) : (
@@ -162,12 +168,12 @@ function VoicePage() {
             </div>
 
             <p className="text-muted-foreground font-mono text-[11px]">
-              Assistant: {assistantId || "not set"}
+              Durable Object: SarvamVoiceAgent/{agentId || "not selected"}
             </p>
 
             <p className="text-muted-foreground text-xs">
-              The browser asks for microphone access. Audio is handled by Vapi; call status and the
-              final transcript arrive through a signed webhook.
+              Audio streams over WebSocket to a Cloudflare Durable Object, with Sarvam STT/TTS and
+              the agent's selected LLM. The finished call syncs into Convex.
             </p>
           </CardContent>
         </Card>
@@ -176,8 +182,8 @@ function VoicePage() {
           <CardHeader>
             <CardTitle>Live transcript</CardTitle>
             <CardDescription>
-              Incremental transcripts from the active call. The saved transcript appears once Vapi
-              sends the end-of-call report.
+              Incremental transcripts from the active call. The saved transcript appears after the
+              call syncs to Convex.
             </CardDescription>
           </CardHeader>
           <CardContent>

@@ -32,7 +32,7 @@ export const recordEvent = internalMutation({
   },
 });
 
-/** Removes a dedupe marker so Vapi's retry can reprocess a failed delivery. */
+/** Removes a dedupe marker so the runtime's retry can reprocess a failed delivery. */
 export const forgetEvent = internalMutation({
   args: { eventHash: v.string() },
   handler: async (ctx, args): Promise<null> => {
@@ -52,6 +52,12 @@ export const applyEvent = internalMutation({
     type: v.string(),
     callId: v.string(),
     assistantId: v.optional(v.string()),
+    agentId: v.optional(v.id("agents")),
+    workspaceId: v.optional(v.id("workspaces")),
+    runtime: v.optional(v.union(v.literal("vapi"), v.literal("cloudflare"))),
+    sessionId: v.optional(v.string()),
+    modelProvider: v.optional(v.string()),
+    modelName: v.optional(v.string()),
     userId: v.optional(v.string()),
     status: v.optional(v.string()),
     endedReason: v.optional(v.string()),
@@ -78,20 +84,26 @@ export const applyEvent = internalMutation({
       .withIndex("by_callId", (q) => q.eq("callId", args.callId))
       .unique();
 
-    const linkedAgent = args.assistantId
-      ? await ctx.db
-          .query("agents")
-          .withIndex("by_vapiAssistantId", (q) => q.eq("vapiAssistantId", args.assistantId))
-          .unique()
-      : null;
+    const linkedAgent = args.agentId
+      ? await ctx.db.get("agents", args.agentId)
+      : args.assistantId
+        ? await ctx.db
+            .query("agents")
+            .withIndex("by_vapiAssistantId", (q) => q.eq("vapiAssistantId", args.assistantId))
+            .unique()
+        : null;
 
     if (!existing) {
       await ctx.db.insert("calls", {
         callId: args.callId,
         userId: args.userId,
-        workspaceId: linkedAgent?.workspaceId,
-        agentId: linkedAgent?._id,
+        workspaceId: args.workspaceId ?? linkedAgent?.workspaceId,
+        agentId: args.agentId ?? linkedAgent?._id,
         assistantId: args.assistantId,
+        runtime: args.runtime,
+        sessionId: args.sessionId,
+        modelProvider: args.modelProvider,
+        modelName: args.modelName,
         type: "webCall",
         status: incomingStatus ?? "unknown",
         endedReason: args.endedReason,
@@ -110,6 +122,24 @@ export const applyEvent = internalMutation({
       if (linkedAgent) {
         patch.workspaceId = existing.workspaceId ?? linkedAgent.workspaceId;
         patch.agentId = existing.agentId ?? linkedAgent._id;
+      }
+      if (args.agentId && !existing.agentId) {
+        patch.agentId = args.agentId;
+      }
+      if (args.workspaceId && !existing.workspaceId) {
+        patch.workspaceId = args.workspaceId;
+      }
+      if (args.runtime && !existing.runtime) {
+        patch.runtime = args.runtime;
+      }
+      if (args.sessionId && !existing.sessionId) {
+        patch.sessionId = args.sessionId;
+      }
+      if (args.modelProvider && !existing.modelProvider) {
+        patch.modelProvider = args.modelProvider;
+      }
+      if (args.modelName && !existing.modelName) {
+        patch.modelName = args.modelName;
       }
 
       // A late, out-of-order status event must never move an ended call back

@@ -26,8 +26,8 @@ export function errorMessage(error: unknown): string {
       }
     }
 
-    // The Vapi SDK throws the raw fetch Response on non-2xx requests. Its
-    // parsed JSON body lives on `.error`.
+    // Some SDKs throw the raw fetch Response on non-2xx requests. Its parsed
+    // JSON body lives on `.error`.
     if (typeof candidate.status === "number") {
       const body =
         typeof candidate.error === "object" && candidate.error !== null
@@ -41,10 +41,7 @@ export function errorMessage(error: unknown): string {
             : typeof candidate.statusText === "string"
               ? candidate.statusText
               : "Request failed";
-      if (candidate.status === 403) {
-        return `Vapi 403: ${detail}. Check that VITE_VAPI_PUBLIC_KEY and VITE_VAPI_ASSISTANT_ID belong to the same Vapi organization, then restart bun dev after editing .env.`;
-      }
-      return `Vapi ${candidate.status}: ${detail}`;
+      return `Request failed (${candidate.status}): ${detail}`;
     }
   }
   return "Something went wrong.";

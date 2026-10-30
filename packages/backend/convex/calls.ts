@@ -22,7 +22,7 @@ async function requireUserId(ctx: QueryCtx | MutationCtx): Promise<string> {
   return userId;
 }
 
-async function findCallByVapiId(
+async function findCallByCallId(
   ctx: QueryCtx | MutationCtx,
   callId: string,
 ): Promise<Doc<"calls"> | null> {
@@ -48,20 +48,21 @@ async function assertCanAccessCall(
 }
 
 /**
- * Called by the browser once Vapi returns the call id. The webhook may have
- * already created the row, so this claims it for the signed-in user instead of
+ * Called by the browser once a call starts. The call sync may have already
+ * created the row, so this claims it for the signed-in user instead of
  * blindly inserting a duplicate.
  */
 export const register = mutation({
   args: {
     callId: v.string(),
-    assistantId: v.string(),
+    assistantId: v.optional(v.string()),
+    runtime: v.optional(v.union(v.literal("vapi"), v.literal("cloudflare"))),
     workspaceId: v.optional(v.id("workspaces")),
     agentId: v.optional(v.id("agents")),
   },
   handler: async (ctx, args): Promise<Id<"calls">> => {
     const userId = await requireUserId(ctx);
-    const existing = await findCallByVapiId(ctx, args.callId);
+    const existing = await findCallByCallId(ctx, args.callId);
     const now = Date.now();
 
     let workspaceId = args.workspaceId;
@@ -94,6 +95,7 @@ export const register = mutation({
         assistantId: existing.assistantId ?? args.assistantId,
         workspaceId: existing.workspaceId ?? workspaceId,
         agentId: existing.agentId ?? agentId,
+        ...(args.runtime ? { runtime: args.runtime } : {}),
         updatedAt: now,
       });
       return existing._id;
@@ -110,6 +112,7 @@ export const register = mutation({
       workspaceId,
       agentId,
       assistantId: args.assistantId,
+      runtime: args.runtime,
       type: "webCall",
       status: "in-progress",
       startedAt: now,
@@ -126,7 +129,7 @@ export const register = mutation({
 export const markEnded = mutation({
   args: { callId: v.string() },
   handler: async (ctx, args): Promise<null> => {
-    const existing = await findCallByVapiId(ctx, args.callId);
+    const existing = await findCallByCallId(ctx, args.callId);
     if (!existing) {
       return null;
     }
@@ -178,7 +181,7 @@ export const get = query({
     if (!userId) {
       return null;
     }
-    const call = await findCallByVapiId(ctx, args.callId);
+    const call = await findCallByCallId(ctx, args.callId);
     if (!call) {
       return null;
     }

@@ -72,11 +72,12 @@ kelasa/
 │       │               └── $.ts    # Proxies Better Auth requests to Convex
 │       ├── tsconfig.json          # Web TS config and path aliases
 │       └── vite.config.ts         # Tailwind, TanStack Start, React plugins
-│   └── sarvam-bridge/             # Vapi custom-transcriber/custom-voice → Sarvam
-│       ├── src/worker.ts          # STT socket, TTS route, SarvamSession DO
-│       ├── src/protocol.ts        # Signed URL params and HMAC verification
-│       ├── src/audio.ts           # Stereo PCM split + base64
-│       └── scripts/               # sign-url, sign-voice-url, stream-wav
+│   └── voice-runtime/             # Cloudflare Agents voice runtime
+│       ├── src/worker.ts          # /agents routing + health
+│       ├── src/agent.ts           # withVoice, onTurn, call sync
+│       ├── src/models.ts          # per-agent LLM registry
+│       ├── src/config.ts          # Convex config lookup
+│       └── src/sync.ts            # /webhooks/voice client
 ├── packages/                      # Shared workspace packages
 │   ├── backend/                   # Convex backend workspace package
 │   │   ├── .env.local             # Local Convex/SITE_URL values (ignored)
@@ -117,11 +118,16 @@ kelasa/
 │   │   ├── alchemy.run.ts         # Cloudflare Website.Vite stack
 │   │   ├── package.json           # Alchemy dev/deploy/destroy scripts
 │   │   └── tsconfig.json          # Infra TS config
-│   ├── infra-sarvam-bridge/       # Alchemy stack for the STT bridge Worker
-│   │   ├── .env.schema            # Sarvam key + bridge secrets
-│   │   ├── alchemy.run.ts         # Cloudflare.Worker + SarvamSession DO
+│   ├── infra-voice/               # Alchemy stack for the voice runtime
+│   │   ├── .env.schema            # Sarvam key + voice sync secret
+│   │   ├── alchemy.run.ts         # Cloudflare.Worker + SarvamVoiceAgent DO
 │   │   ├── package.json           # Alchemy dev/deploy/destroy scripts
 │   │   └── tsconfig.json          # Infra TS config
+│   ├── sarvam/                    # Shared Sarvam STT/TTS clients
+│   │   ├── src/stt.ts             # streaming STT session
+│   │   ├── src/tts.ts             # Bulbul adapter
+│   │   ├── src/languages.ts       # language/mode/model enums
+│   │   └── src/audio.ts           # PCM/WAV helpers
 │   └── ui/                        # Shared component library
 │       ├── components.json        # shadcn base-lyra config
 │       ├── package.json           # Shared exports and UI dependencies
@@ -166,8 +172,8 @@ Auth wiring: Better Auth runs as a locally installed Convex component (`convex/b
 - `bun run dev:marketing` — run the independent TanStack Start marketing app on port 3002 with shared `@kelasa/ui`; no Convex or auth env required.
 - `bun run dev:infra` — alias for `dev:infra:web`.
 - `bun run dev:infra:web` — run the web Alchemy stack in local Cloudflare emulation on 3001; do not run it alongside `bun run dev`.
-- `bun run dev:infra:bridge` — run only the Sarvam bridge Worker in local emulation on port 3010.
-- `bun run deploy:web` / `bun run deploy:bridge` — deploy one Alchemy stack; `bun run deploy` deploys both. Each stack has its own `.env.schema` and state.
+- `bun run dev:infra:voice` — run the Cloudflare voice runtime in local emulation on port 3011.
+- `bun run deploy:web` / `bun run deploy:voice` — deploy one Alchemy stack; `bun run deploy` deploys both. Each stack has its own `.env.schema` and state.
 - `bun run check` — main gate: `vp check` (format + lint) followed by recursive typecheck.
 - `bun run lint`, `bun run format`, `bun run staged`, `bun run check-types` — focused checks.
 - Root `check-types` skips `packages/backend` (it has no script). Typecheck it with `bunx tsc --noEmit -p packages/backend/convex`.
@@ -184,7 +190,7 @@ Auth wiring: Better Auth runs as a locally installed Convex component (`convex/b
 - Bun auto-loading is disabled (`bunfig.toml` at root and in `apps/web`). Configuration is validated by Varlock from `.env.schema` files.
 - Never edit generated `apps/web/src/env.ts`; change `apps/web/.env.schema` and run `bun run env:generate`.
 - Client code imports `ENV` from `src/env.public.ts`; server-only code imports `src/env.ts`.
-- `packages/infra-web/.env.schema` imports its Convex/Vapi vars from `apps/web`; `packages/infra-sarvam-bridge/.env.schema` is independent and holds the Sarvam key and bridge secrets. Run Varlock-dependent tools from the owning stack directory.
+- `packages/infra-web/.env.schema` imports its Convex vars from `apps/web`; `packages/infra-voice/.env.schema` is independent and holds the Sarvam key and voice sync secret. Run Varlock-dependent tools from the owning stack directory.
 - `packages/backend/convex/auth.ts` reads `SITE_URL` and `BETTER_AUTH_SECRET` from the Convex deployment environment. They are not part of `apps/web/.env`; set them with `bunx convex env set` or in the Convex dashboard.
 - Better Auth rate limiting uses the local component's `rateLimit` table (`storage: "database"`), so counters survive across Convex workers.
 - Dodo Payments will use `DODO_PAYMENTS_API_KEY`, `DODO_PAYMENTS_ENVIRONMENT`, and `DODO_PAYMENTS_WEBHOOK_SECRET` in the Convex deployment environment when billing is implemented.
@@ -203,7 +209,7 @@ Auth wiring: Better Auth runs as a locally installed Convex component (`convex/b
 - Shared UI uses Base UI primitives (`@base-ui/react`), not Radix. Use `cn` from `@kelasa/ui/lib/utils`.
 - Tailwind is CSS-first (no `tailwind.config`); design tokens and global styles live in `packages/ui/src/styles/globals.css`. `apps/web/src/index.css` just imports `@kelasa/ui/globals.css`.
 - App code uses the `@/` alias; shared-package imports use `@kelasa/ui/...` and Convex APIs use `@kelasa/backend/convex/_generated/api`.
-- Deploys default to a personal `dev_<username>` stage. Production: `cd packages/infra-web && bunx alchemy deploy --stage production` and `cd packages/infra-sarvam-bridge && bunx alchemy deploy --stage production`. Configure provider profiles with `bunx alchemy profile edit`.
+- Deploys default to a personal `dev_<username>` stage. Production: `cd packages/infra-web && bunx alchemy deploy --stage production` and `cd packages/infra-voice && bunx alchemy deploy --stage production`. Configure provider profiles with `bunx alchemy profile edit`.
 - Keep `bts.jsonc`; it is Better-T-Stack metadata used by `bunx create-better-t-stack@latest add`.
 - `ARCHITECTURE.md` is the architecture decision record. Keep it in sync when changing auth, billing, workspace tenancy, or deployment boundaries.
 
