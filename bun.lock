@@ -18,6 +18,15 @@
         "vite-plus": "1.4.0",
       },
     },
+    "apps/sarvam-bridge": {
+      "name": "@convex-vapi/sarvam-bridge",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@cloudflare/workers-types": "^5.20260906.1",
+        "@convex-vapi/config": "workspace:*",
+        "typescript": "catalog:",
+      },
+    },
     "apps/web": {
       "name": "web",
       "dependencies": {
@@ -80,11 +89,21 @@
       "name": "@convex-vapi/config",
       "version": "0.0.0",
     },
-    "packages/infra": {
-      "name": "@convex-vapi/infra",
-      "dependencies": {
-        "zod": "catalog:",
+    "packages/infra-sarvam-bridge": {
+      "name": "@convex-vapi/infra-sarvam-bridge",
+      "devDependencies": {
+        "@alchemy.run/cloudflare": "2.0.0-beta.84",
+        "@convex-vapi/config": "workspace:*",
+        "@effect/platform-bun": "4.0.6",
+        "@effect/platform-node": "4.0.6",
+        "alchemy": "2.0.0-beta.84",
+        "effect": "4.0.6",
+        "typescript": "catalog:",
+        "varlock": "catalog:",
       },
+    },
+    "packages/infra-web": {
+      "name": "@convex-vapi/infra-web",
       "devDependencies": {
         "@alchemy.run/cloudflare": "2.0.0-beta.84",
         "@convex-vapi/config": "workspace:*",
@@ -123,6 +142,7 @@
     },
   },
   "overrides": {
+    "@effect/platform-node-shared": "4.0.6",
     "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
   },
   "catalog": {
@@ -285,7 +305,11 @@
 
     "@convex-vapi/config": ["@convex-vapi/config@workspace:packages/config"],
 
-    "@convex-vapi/infra": ["@convex-vapi/infra@workspace:packages/infra"],
+    "@convex-vapi/infra-sarvam-bridge": ["@convex-vapi/infra-sarvam-bridge@workspace:packages/infra-sarvam-bridge"],
+
+    "@convex-vapi/infra-web": ["@convex-vapi/infra-web@workspace:packages/infra-web"],
+
+    "@convex-vapi/sarvam-bridge": ["@convex-vapi/sarvam-bridge@workspace:apps/sarvam-bridge"],
 
     "@convex-vapi/ui": ["@convex-vapi/ui@workspace:packages/ui"],
 
@@ -321,7 +345,7 @@
 
     "@effect/platform-node": ["@effect/platform-node@4.0.6", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.6", "undici": "^8.12.2" }, "peerDependencies": { "effect": "^4.0.6", "redis": ">=5.0.0 <7.0.0" } }, "sha512-gXvGHAy0/8PZbWvMMguloDUyeSP+rzYEo3FSEqUuGduxo9ORcGioDxPI+GOLCIFfam7VuNkmSUxBOiRMIrMrBw=="],
 
-    "@effect/platform-node-shared": ["@effect/platform-node-shared@4.1.0", "", { "dependencies": { "@types/ws": "^8.18.2", "ws": "^8.22.0" }, "peerDependencies": { "effect": "^4.1.0" } }, "sha512-uYQfFRoxWLo8fIhiSeBcmz/R1ooOfE3HF3cWHFgxz82tZMk2Wn02BGABcdLmaAch9VpDLbtWnuhSxNyBsGMUFg=="],
+    "@effect/platform-node-shared": ["@effect/platform-node-shared@4.0.6", "", { "dependencies": { "@types/ws": "^8.18.2", "ws": "^8.22.0" }, "peerDependencies": { "effect": "^4.0.6" } }, "sha512-0PhyC4uG30xGtsajnxjkcBWfTjNRzUh4ZKl1Kvo/MNyCTb+W2O+fBzf7wCRCoqt+nLudiq4V7vX40Q8XIBuMaQ=="],
 
     "@effect/sql-d1": ["@effect/sql-d1@4.1.0", "", { "dependencies": { "@cloudflare/workers-types": "^5.20261016.1" }, "peerDependencies": { "effect": "^4.1.0" } }, "sha512-Sg3UxQGc5yPc9LZ4WmiwHzVv+Wpqntue+4QRYx/XdLLyrZH4w+BkshPzifC7p7uQg9OaiaeQJPlsKZs6Bm9plw=="],
 
@@ -1486,6 +1510,8 @@
     "@dotenvx/dotenvx/undici": ["undici@7.30.1", "", {}, "sha512-03KrMbjIFDWQR5RNPrSw3bd1r12JpyFQl9/yxjUbJtqkjmllqC5lFjZh6ujeuJCKr8EOQvRW872Oy/az+nLYxg=="],
 
     "@effect/platform-node-shared/ws": ["ws@8.22.0", "", { "peerDependencies": { "bufferutil": "^4.0.1", "utf-8-validate": ">=5.0.2" }, "optionalPeers": ["bufferutil", "utf-8-validate"] }, "sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg=="],
+
+    "@effect/sql-d1/effect": ["effect@4.1.0", "", {}, "sha512-lGx2MJJyrXA8RZb2UpQ/0Nkb5Utaimby7oD92+18noBxLPE85IFOvptdzau8dvcxAOwfwHo9iqapbKeFzqQM/Q=="],
 
     "@shadcn/registry/cn": ["cn@0.2.6", "", { "bin": { "cn": "bin/cn.mjs" } }, "sha512-+i4L0zUGgRcEnhsxueVrP7iBGxBx5iD0WOTYg1MwFEu2ZyCmH5Ov2V1cul2Ht5UchRQQgftCf4be/RxspuW6QQ=="],
 

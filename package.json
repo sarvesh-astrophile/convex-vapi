@@ -33,8 +33,15 @@
     "dev:web": "vp run --filter web dev",
     "dev:server": "vp run --filter @convex-vapi/backend dev",
     "dev:setup": "vp run --filter @convex-vapi/backend dev:setup",
-    "deploy": "vp run --filter @convex-vapi/infra deploy",
-    "destroy": "vp run --filter @convex-vapi/infra destroy",
+    "dev:infra": "bun run dev:infra:web",
+    "dev:infra:web": "vp run --filter @convex-vapi/infra-web dev",
+    "dev:infra:bridge": "vp run --filter @convex-vapi/infra-sarvam-bridge dev",
+    "deploy": "bun run deploy:web && bun run deploy:bridge",
+    "deploy:web": "vp run --filter @convex-vapi/infra-web deploy",
+    "deploy:bridge": "vp run --filter @convex-vapi/infra-sarvam-bridge deploy",
+    "destroy": "bun run destroy:web && bun run destroy:bridge",
+    "destroy:web": "vp run --filter @convex-vapi/infra-web destroy",
+    "destroy:bridge": "vp run --filter @convex-vapi/infra-sarvam-bridge destroy",
     "env:generate": "varlock codegen --path ./apps/web/",
     "postinstall": "varlock codegen --path ./apps/web/"
   },
@@ -52,6 +59,7 @@
     "vite-plus": "1.4.0"
   },
   "overrides": {
+    "@effect/platform-node-shared": "4.0.6",
     "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0"
   },
   "packageManager": "bun@1.4.2"

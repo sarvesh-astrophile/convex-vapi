@@ -1,5 +1,5 @@
 {
-  "name": "@convex-vapi/infra",
+  "name": "@convex-vapi/infra-web",
   "private": true,
   "type": "module",
   "scripts": {
@@ -7,9 +7,6 @@
     "dev": "alchemy dev",
     "deploy": "alchemy deploy",
     "destroy": "alchemy destroy"
-  },
-  "dependencies": {
-    "zod": "catalog:"
   },
   "devDependencies": {
     "@alchemy.run/cloudflare": "2.0.0-beta.84",

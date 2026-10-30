@@ -59,6 +59,15 @@ team must have AI Gateway access (paid plan). See
 [docs/voice-agent-builder.md](docs/voice-agent-builder.md) and
 [docs/vapi-voice-agent.md](docs/vapi-voice-agent.md).
 
+### Sarvam speech-to-text and text-to-speech
+
+Sarvam runs through a Cloudflare Worker bridge that implements Vapi's
+`custom-transcriber` WebSocket protocol and `custom-voice` HTTP protocol. It
+runs Saaras v4 on the customer audio channel, Bulbul for the assistant voice,
+and can fall back to Deepgram/Vapi if Sarvam is unavailable. Deploy it with
+`bun run deploy:bridge` and sign per-assistant transcriber and voice URLs. See
+[docs/sarvam-stt-bridge.md](docs/sarvam-stt-bridge.md).
+
 ## Convex Setup
 
 This project uses Convex as a backend. You'll need to set up Convex before running the app:
@@ -123,17 +132,24 @@ Run standalone Node/Bun tools that use Varlock from the owning app directory so 
 ### Alchemy
 
 - Target: web on Cloudflare
-- Configure provider accounts: `cd packages/infra && bunx alchemy profile edit`
+- Configure provider accounts: `cd packages/infra-web && bunx alchemy profile edit`
 - Dev: bun run dev
-- Deploy: bun run deploy
+- Deploy web: bun run deploy:web
+- Deploy Sarvam bridge: bun run deploy:bridge
+- Deploy both: bun run deploy
 - Destroy: bun run destroy
+
+Each stack has its own schema and state: `packages/infra-web` for the web
+worker and `packages/infra-sarvam-bridge` for the Sarvam STT Worker. The bridge
+is also available during local emulation with `bun run dev:infra:bridge`.
 
 `alchemy profile edit` stores the selected Axiom, Cloudflare, Neon, PlanetScale, and/or Prisma provider profiles under `~/.alchemy`; no provider-specific setup command is required by this scaffold.
 
-Deploys are staged and default to a personal `dev_<username>` stage. For production, run the deploy with an explicit stage from `packages/infra`:
+Deploys are staged and default to a personal `dev_<username>` stage. For production, run the deploy with an explicit stage from the owning stack:
 
 ```bash
-cd packages/infra && bunx alchemy deploy --stage production
+cd packages/infra-web && bunx alchemy deploy --stage production
+cd packages/infra-sarvam-bridge && bunx alchemy deploy --stage production
 ```
 
 ## Git Hooks and Formatting
@@ -148,9 +164,12 @@ cd packages/infra && bunx alchemy deploy --stage production
 convex-vapi/
 ├── apps/
 │   ├── web/         # Frontend application (React + TanStack Start)
+│   ├── sarvam-bridge/ # Vapi custom-transcriber → Sarvam Worker
 ├── packages/
 │   ├── ui/          # Shared shadcn/ui components and styles
 │   ├── backend/     # Convex backend functions and schema
+│   ├── infra-web/   # Alchemy stack for the web worker
+│   ├── infra-sarvam-bridge/ # Alchemy stack for the STT bridge
 ```
 
 ## Available Scripts
@@ -159,6 +178,10 @@ convex-vapi/
 - `bun run build`: Build all applications
 - `bun run dev:web`: Start only the web application
 - `bun run dev:setup`: Setup and configure your Convex project
+- `bun run dev:infra:web`: Run the web stack in Cloudflare local emulation
+- `bun run dev:infra:bridge`: Run the Sarvam bridge Worker locally
+- `bun run deploy:web` / `bun run deploy:bridge`: Deploy one stack
+- `bun run deploy`: Deploy both stacks
 - `bun run check-types`: Check TypeScript types across all apps
 - `bun run check`: Run Vite+ format/lint checks and workspace TypeScript checks
 - `bun run lint`: Run Vite+ lint checks

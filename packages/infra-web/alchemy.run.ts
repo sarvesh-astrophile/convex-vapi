@@ -4,6 +4,10 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import "varlock/auto-load";
 
+/**
+ * Web app stack. Kept as `convex-vapi` so deployments continue to use the
+ * existing stack state.
+ */
 export default Alchemy.Stack(
   "convex-vapi",
   {
