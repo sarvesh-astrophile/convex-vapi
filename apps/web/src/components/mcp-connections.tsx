@@ -16,19 +16,39 @@ import { toast } from "sonner";
 
 import { ENV } from "@/env.public";
 
-export default function McpConnections() {
-  const serverUrl = `${ENV.VITE_CONVEX_SITE_URL}/mcp/auto`;
-  const connections = useQuery(api.mcp.listConnections);
-  const createApiKey = useAction(api.mcp.createApiKey);
-  const revokeConnection = useMutation(api.mcp.revokeConnection);
+type ServerId = "auto" | "sales-dip";
 
+const SERVERS: Record<ServerId, { label: string; name: string; description: string }> = {
+  auto: {
+    label: "Auto driver",
+    name: "auto-driver",
+    description: "the Auto driver demo data",
+  },
+  "sales-dip": {
+    label: "Sales dip",
+    name: "sales-dip",
+    description: "the Sales dip demo data",
+  },
+};
+
+export default function McpConnections() {
+  const connections = useQuery(api.mcp.listConnections);
+  const revokeConnection = useMutation(api.mcp.revokeConnection);
+  const createAutoKey = useAction(api.mcp.createApiKey);
+  const createSalesDipKey = useAction(api.salesDipMcp.createApiKey);
+
+  const [serverId, setServerId] = useState<ServerId>("auto");
   const [keyName, setKeyName] = useState("CLI key");
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const server = SERVERS[serverId];
+  const serverUrl = `${ENV.VITE_CONVEX_SITE_URL}/mcp/${serverId === "auto" ? "auto" : "sales-dip"}`;
+
   const createKey = async () => {
     setBusy(true);
     try {
+      const createApiKey = serverId === "auto" ? createAutoKey : createSalesDipKey;
       const result = await createApiKey({ name: keyName.trim() || "CLI key" });
       setCreatedKey(result.apiKey);
       toast.success("API key created. Copy it now; it is only shown once.");
@@ -62,10 +82,33 @@ export default function McpConnections() {
       <CardHeader>
         <CardTitle>Connected agents (MCP)</CardTitle>
         <CardDescription>
-          Let Claude, ChatGPT, Cursor, or Claude Code read the Auto driver demo data.
+          Let Claude, ChatGPT, Cursor, or Claude Code read the Auto driver and Sales dip demo data.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        <div className="space-y-2">
+          <Label>Demo server</Label>
+          <div className="flex flex-wrap gap-2">
+            {(Object.keys(SERVERS) as ServerId[]).map((id) => (
+              <Button
+                key={id}
+                variant={serverId === id ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  setServerId(id);
+                  setCreatedKey(null);
+                }}
+              >
+                {SERVERS[id].label}
+              </Button>
+            ))}
+          </div>
+          <p className="text-muted-foreground text-sm">
+            New API keys are scoped to {server.description}. Connections listed below may belong to
+            either demo server.
+          </p>
+        </div>
+
         <div className="space-y-2">
           <Label>MCP server URL</Label>
           <div className="flex gap-2">
@@ -100,7 +143,7 @@ export default function McpConnections() {
             </div>
           ) : null}
           <pre className="overflow-x-auto rounded border p-3 text-xs">
-            {`claude mcp add --transport http auto-driver ${serverUrl} \\\n  --header "Authorization: Bearer <key>"`}
+            {`claude mcp add --transport http ${server.name} ${serverUrl} \\\n  --header "Authorization: Bearer <key>"`}
           </pre>
         </div>
 

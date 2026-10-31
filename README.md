@@ -106,6 +106,39 @@ bunx convex run mcp:createApiKeyForUser '{"userId":"<better-auth user id>"}'
 signed-in user connected with the `auto:read` scope sees the same AUTO1001
 export.
 
+## Sales dip MCP
+
+`convex/salesDipMcp.ts` exposes a second, read-only MCP server for the bundled
+MER1001 sales dip export (`apps/web/public/data/sales_dip_*.csv`):
+
+- `get_sales_dip_overview` — week-over-week sales dip headline.
+- `list_transactions` — individual payments filtered by date, mode, or status.
+- `get_daily_sales` — per-day totals with evening/UPI/Card splits.
+
+Server URL: `https://<deployment>.convex.site/mcp/sales-dip`. The consent page
+is `/connect?server=sales-dip`. Because the MCP component serves one root
+OAuth discovery document per origin, Sales dip advertises a path-based issuer
+and serves its metadata from
+`/.well-known/oauth-authorization-server/mcp/sales-dip`; Auto keeps the root
+documents.
+
+Deploy the backend, then load the CSV rows once:
+
+```bash
+cd packages/backend
+bunx convex dev --once
+bun run seed:sales-dip
+```
+
+Mint a key for tests/CLI agents with:
+
+```bash
+bunx convex run salesDipMcp:createApiKeyForUser '{"userId":"<better-auth user id>"}'
+```
+
+The dashboard's **Connected agents** card has a server selector for creating
+Auto or Sales dip API keys, and `bun run check:mcp` lints both MCP servers.
+
 ## Sarvam runtime (separate pages)
 
 The Sarvam browser runtime is unchanged but now lives under its own section:

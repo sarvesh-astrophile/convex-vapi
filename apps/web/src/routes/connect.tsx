@@ -28,17 +28,19 @@ import SignUpForm from "@/components/sign-up-form";
 export const Route = createFileRoute("/connect")({
   validateSearch: (search: Record<string, unknown>) => ({
     request: typeof search.request === "string" ? search.request : undefined,
+    server: typeof search.server === "string" ? search.server : undefined,
   }),
   component: ConnectPage,
   head: () => ({
-    meta: [{ title: "Connect an agent · Auto Driver Data" }],
+    meta: [{ title: "Connect an agent · MCP" }],
   }),
 });
 
 function ConnectPage() {
-  const { request } = Route.useSearch();
+  const { request, server } = Route.useSearch();
   const [requestId, setRequestId] = useState<string | undefined>(request);
   const [framed, setFramed] = useState(false);
+  const useSalesDip = server === "sales-dip";
 
   useEffect(() => {
     setRequestId(request);
@@ -66,7 +68,7 @@ function ConnectPage() {
   return (
     <main className="mx-auto w-full max-w-xl p-6">
       <Authenticated>
-        <ConsentPanel requestId={requestId} onRequestId={setRequestId} />
+        <ConsentPanel requestId={requestId} onRequestId={setRequestId} useSalesDip={useSalesDip} />
       </Authenticated>
       <Unauthenticated>
         <SignedOutPanel />
@@ -96,18 +98,28 @@ function SignedOutPanel() {
 function ConsentPanel({
   requestId,
   onRequestId,
+  useSalesDip,
 }: {
   requestId: string | undefined;
   onRequestId: (id: string) => void;
+  useSalesDip: boolean;
 }) {
   if (!requestId) {
-    return <FindRequestPanel onRequestId={onRequestId} />;
+    return <FindRequestPanel onRequestId={onRequestId} useSalesDip={useSalesDip} />;
   }
-  return <RequestDecision requestId={requestId} />;
+  return <RequestDecision requestId={requestId} useSalesDip={useSalesDip} />;
 }
 
-function FindRequestPanel({ onRequestId }: { onRequestId: (id: string) => void }) {
-  const findRequest = useMutation(api.mcp.findAuthRequest);
+function FindRequestPanel({
+  onRequestId,
+  useSalesDip,
+}: {
+  onRequestId: (id: string) => void;
+  useSalesDip: boolean;
+}) {
+  const findAutoRequest = useMutation(api.mcp.findAuthRequest);
+  const findSalesDipRequest = useMutation(api.salesDipMcp.findAuthRequest);
+  const findRequest = useSalesDip ? findSalesDipRequest : findAutoRequest;
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -161,9 +173,13 @@ function FindRequestPanel({ onRequestId }: { onRequestId: (id: string) => void }
   );
 }
 
-function RequestDecision({ requestId }: { requestId: string }) {
-  const request = useQuery(api.mcp.getAuthRequest, { requestId });
-  const authorize = useAction(api.mcp.authorize);
+function RequestDecision({ requestId, useSalesDip }: { requestId: string; useSalesDip: boolean }) {
+  const autoRequest = useQuery(api.mcp.getAuthRequest, { requestId });
+  const salesDipRequest = useQuery(api.salesDipMcp.getAuthRequest, { requestId });
+  const request = useSalesDip ? salesDipRequest : autoRequest;
+  const authorizeAutoRequest = useAction(api.mcp.authorize);
+  const authorizeSalesDipRequest = useAction(api.salesDipMcp.authorize);
+  const authorize = useSalesDip ? authorizeSalesDipRequest : authorizeAutoRequest;
   const [confirmedCode, setConfirmedCode] = useState(false);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<"approved" | "denied" | null>(null);

@@ -277,4 +277,29 @@ export default defineSchema({
     .index("by_opportunityId", ["opportunityId"])
     .index("by_date", ["date"])
     .index("by_location_and_date", ["location", "date"]),
+
+  /** Bundled demo data for the Sales dip MCP server (`salesDip.ts`). */
+  salesDipTransactions: defineTable({
+    transactionId: v.string(),
+    merchantId: v.string(),
+    /** ISO date, YYYY-MM-DD. */
+    date: v.string(),
+    time: v.string(),
+    amountInr: v.number(),
+    paymentMode: v.string(),
+    status: v.string(),
+  })
+    .index("by_transactionId", ["transactionId"])
+    .index("by_merchantId_and_date", ["merchantId", "date"]),
+
+  /** Weekly rollups for the Sales dip demo ("Previous week" / "Current week"). */
+  salesDipWeeklySummaries: defineTable({
+    period: v.string(),
+    totalSalesInr: v.number(),
+    transactionCount: v.number(),
+    averageTransactionValueInr: v.number(),
+    eveningSalesInr: v.number(),
+    eveningTransactionCount: v.number(),
+    repeatCustomers: v.number(),
+  }).index("by_period", ["period"]),
 });

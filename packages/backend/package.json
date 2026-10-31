@@ -8,6 +8,7 @@
     "dev": "convex dev",
     "dev:setup": "convex dev --configure --until-success",
     "seed:auto-driver": "bun scripts/seed-auto-driver.ts",
+    "seed:sales-dip": "bun scripts/seed-sales-dip.ts",
     "check:mcp": "bun scripts/check-mcp.ts"
   },
   "dependencies": {

@@ -1,3 +1,4 @@
+import type { HttpRouter } from "convex/server";
 import { httpRouter } from "convex/server";
 import { Vapi } from "convex-vapi";
 
@@ -7,10 +8,14 @@ import { httpAction } from "./_generated/server";
 import { authComponent, createAuth } from "./auth";
 import { hmacSha256Hex, timingSafeEqual } from "./lib/crypto";
 import { mcp } from "./mcp";
+import { salesDipMcp } from "./salesDipMcp";
+
+const SALES_DIP_MCP_PATH = "/mcp/sales-dip";
 
 const http = httpRouter();
 
 mcp.registerRoutes(http);
+registerSalesDipMcpRoutes(http);
 
 const vapi = new Vapi(components.convexVapi, {
   apiKey: process.env.VAPI_API_KEY ?? "",
@@ -118,6 +123,80 @@ http.route({
 authComponent.registerRoutes(http, createAuth);
 
 export default http;
+
+/**
+ * Sales dip is a second MCP server on the same Convex origin. The component's
+ * root discovery documents can only describe one server, so Sales dip
+ * advertises itself as a path-based issuer (`<site>/mcp/sales-dip`) and its
+ * authorization-server metadata is served from the RFC 8414 path-inserted
+ * `/.well-known/oauth-authorization-server/mcp/sales-dip` URL. Auto keeps the
+ * root discovery documents.
+ */
+function registerSalesDipMcpRoutes(router: HttpRouter) {
+  // Paths already registered by the Auto server (or overridden below).
+  const skip = new Set([
+    "/.well-known/oauth-protected-resource",
+    "/.well-known/oauth-authorization-server",
+    `/.well-known/oauth-protected-resource${SALES_DIP_MCP_PATH}`,
+  ]);
+
+  const filtered = {
+    route(spec: Parameters<HttpRouter["route"]>[0]) {
+      if ("path" in spec && skip.has(spec.path)) return;
+      router.route(spec);
+    },
+  } as unknown as HttpRouter;
+
+  salesDipMcp.registerRoutes(filtered);
+
+  const discoveryHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, MCP-Protocol-Version",
+    "Cache-Control": "public, max-age=300",
+  };
+
+  const issuer = () => `${salesDipMcp.siteUrl}${SALES_DIP_MCP_PATH}`;
+
+  router.route({
+    path: `/.well-known/oauth-protected-resource${SALES_DIP_MCP_PATH}`,
+    method: "GET",
+    handler: httpAction(async () =>
+      Response.json(
+        {
+          ...salesDipMcp.protectedResourceMetadata(),
+          authorization_servers: [issuer()],
+        },
+        { headers: discoveryHeaders },
+      ),
+    ),
+  });
+
+  router.route({
+    path: `/.well-known/oauth-protected-resource${SALES_DIP_MCP_PATH}`,
+    method: "OPTIONS",
+    handler: httpAction(async () => new Response(null, { status: 204, headers: discoveryHeaders })),
+  });
+
+  router.route({
+    path: `/.well-known/oauth-authorization-server${SALES_DIP_MCP_PATH}`,
+    method: "GET",
+    handler: httpAction(async () => {
+      const metadata: Record<string, unknown> = {
+        ...salesDipMcp.authorizationServerMetadata(),
+        issuer: issuer(),
+      };
+      delete metadata.authorization_response_iss_parameter_supported;
+      return Response.json(metadata, { headers: discoveryHeaders });
+    }),
+  });
+
+  router.route({
+    path: `/.well-known/oauth-authorization-server${SALES_DIP_MCP_PATH}`,
+    method: "OPTIONS",
+    handler: httpAction(async () => new Response(null, { status: 204, headers: discoveryHeaders })),
+  });
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
