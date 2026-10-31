@@ -19,6 +19,7 @@ Browser
 apps/voice-runtime/
 ├── src/worker.ts        # Worker entry + agent routing
 ├── src/agent.ts         # withVoice agent, onTurn, call sync
+├── src/guard.ts         # transcript echo filter + reply de-duplication
 ├── src/models.ts        # provider registry
 ├── src/config.ts        # Convex config lookup
 ├── src/sync.ts          # call-end sync
@@ -142,6 +143,30 @@ bun run deploy:voice
 
 The stack prints the Worker URL. Set `VITE_VOICE_RUNTIME_URL` to that URL in
 `apps/web/.env` and redeploy web with `bun run deploy:web`.
+
+## Conversation quality
+
+Repeating greetings have three causes, all handled in the runtime:
+
+1. **Reconnects replay the greeting.** The browser transport (PartySocket)
+   re-sends `start_call` after every reconnect, which used to re-run
+   `onCallStart` and speak the first message again. The DO now keeps the call id
+   and greets once per call; a `start_call` within 5 minutes of the last
+   activity resumes the running call.
+2. **Cross-call history leaks.** One Durable Object serves every call for an
+   agent, so the conversation table is cleared at call start (unless another
+   connection is active).
+3. **Noise becomes a turn.** Short fragments the transcriber produces from
+   background noise or TTS bleed back ("आप।", "मैं।", "Up.") are dropped in
+   `afterTranscribe()` instead of being answered.
+
+`guardReplyStream()` additionally strips leading greetings, canned
+"how can I help" lines, unprompted self-introductions, and any sentence already
+spoken in the call. If nothing survives it speaks a short "जी, बताइए?" instead of
+restarting the conversation.
+
+Sarvam STT runs without `high_vad_sensitivity` and merges finals within 500 ms so
+one sentence is not split into several turns.
 
 ## Current limits
 

@@ -17,6 +17,7 @@ import { streamText } from "ai";
 
 import { loadAgentConfig } from "./config";
 import type { Env, LoadedAgentConfig } from "./env";
+import { evaluateTranscript, guardReplyStream } from "./guard";
 import { resolveModel } from "./models";
 import { syncCall, type SyncedTurn } from "./sync";
 
@@ -26,68 +27,30 @@ const VoiceAgent = withVoice(Agent, {
   historyLimit: 20,
 });
 
+/**
+ * PartySocket reconnects on network flaps, laptop sleep and DO restarts. The
+ * client re-sends `start_call` each time, so a naive `onCallStart` would replay
+ * the greeting. Resume the same call inside this window instead.
+ */
+const CALL_RESUME_WINDOW_MS = 5 * 60_000;
+const MAX_TRACKED_ASSISTANT_MESSAGES = 8;
+
 type StoredTurn = {
   role: "user" | "assistant";
   text: string;
   timestamp: number;
 };
 
-const GREETING_PREFIXES = ["नमस्ते", "नमस्कार", "हाय", "hello", "hi", "hey"];
-
-/**
- * Sarvam-105B tends to start every turn with a greeting even when the system
- * prompt says not to. Strip it from later turns so the spoken reply and the
- * persisted transcript stay conversational.
- */
-async function* stripLeadingGreeting(stream: AsyncIterable<string>): AsyncGenerator<string> {
-  let buffer = "";
-  let decided = false;
-
-  for await (const chunk of stream) {
-    if (decided) {
-      yield chunk;
-      continue;
-    }
-
-    buffer += chunk;
-    if (buffer.trim().length < 15 && !/[,.!?।\n]/.test(buffer)) {
-      continue;
-    }
-
-    decided = true;
-    const stripped = removeGreeting(buffer);
-    if (stripped.length > 0) {
-      yield stripped;
-    }
-  }
-
-  if (!decided) {
-    const stripped = removeGreeting(buffer);
-    if (stripped.length > 0) yield stripped;
-  }
-}
-
-function removeGreeting(text: string): string {
-  let output = text.trimStart();
-  for (const prefix of GREETING_PREFIXES) {
-    if (output.toLowerCase().startsWith(prefix)) {
-      output = output.slice(prefix.length).replace(/^[\s,.!?।,:;-]+/, "");
-      break;
-    }
-  }
-  return output;
-}
-
 function buildSystemPrompt(config: LoadedAgentConfig): string {
   return `${config.config.systemPrompt}
 
-You are "${config.name}".
+You are "${config.name}". Everything you write is spoken aloud, so keep it natural and short.
 Conversation rules (follow strictly):
-- The first assistant message already greeted the caller. Never open a later reply with a greeting: no "नमस्ते", "नमस्कार", "hello", "hi", or "hey".
-- Do not introduce yourself unless the caller directly asks who they are speaking to. If asked, answer with your name only once.
-- Use prior turns and the caller's name when relevant.
-- Do not repeat a previous answer verbatim. Answer the latest user message directly.
-- Keep replies to one or two short spoken sentences.
+- This conversation has already started. Never open a reply with a greeting ("नमस्ते", "नमस्कार", "hello", "hi", "hey") and never ask "how can I help" again.
+- Never repeat an earlier answer and never re-introduce yourself unprompted. Answer the latest caller message directly.
+- If the caller asks who you are, answer with your name ("${config.name}"). If they ask which model or company powers you, answer honestly and briefly.
+- If the caller's words are unclear, ask them once to repeat. Do not restart the conversation.
+- Keep replies to one or two short sentences.
 
 Example of a correct follow-up:
 User: मेरा नाम सर्वेश है।
@@ -98,12 +61,29 @@ export class SarvamVoiceAgent extends VoiceAgent<Env> {
   private config: LoadedAgentConfig | null = null;
   private callId = "";
   private startedAt = 0;
+  private lastActivityAt = 0;
+  private greeted = false;
+
+  /** Assistant text already spoken in this call, used to suppress repeats. */
+  private readonly spoken: string[] = [];
 
   // `tts` and `transcriber` are created per call in beforeCallStart() /
   // createTranscriber() so each agent version can choose its own voice.
   tts?: SarvamTtsProvider;
 
   async beforeCallStart(): Promise<boolean> {
+    if (
+      this.callId.length > 0 &&
+      this.config !== null &&
+      this.tts !== undefined &&
+      Date.now() - this.lastActivityAt < CALL_RESUME_WINDOW_MS
+    ) {
+      // Reconnect of the call that is already running: keep the call id,
+      // transcript and TTS provider, and skip the greeting.
+      this.lastActivityAt = Date.now();
+      return true;
+    }
+
     const config = await loadAgentConfig(this.env, this.name);
     if (config.runtime !== "cloudflare") {
       return false;
@@ -112,6 +92,10 @@ export class SarvamVoiceAgent extends VoiceAgent<Env> {
     this.config = config;
     this.callId = `cf_${crypto.randomUUID()}`;
     this.startedAt = Date.now();
+    this.lastActivityAt = Date.now();
+    this.greeted = false;
+    this.spoken.length = 0;
+    this.resetConversation();
 
     const language = toSarvamLanguage(config.config.transcriber.language);
     const ttsLanguage = language === "unknown" ? "hi-IN" : language;
@@ -154,8 +138,29 @@ export class SarvamVoiceAgent extends VoiceAgent<Env> {
     };
   }
 
+  /**
+   * Drop fragments that are noise, the agent's own TTS leaking back through the
+   * microphone, or filler words. Returning null skips the turn instead of
+   * letting the model answer "आप।" with a fresh greeting.
+   */
+  afterTranscribe(transcript: string): string | null {
+    const decision = evaluateTranscript(transcript, this.spoken);
+    if (decision.accept) {
+      this.lastActivityAt = Date.now();
+      return decision.text;
+    }
+
+    console.info("voice-runtime: ignored transcript", {
+      agentId: this.name,
+      reason: decision.reason,
+      transcript,
+    });
+    return null;
+  }
+
   async onCallStart(connection: Connection): Promise<void> {
     const config = this.requireConfig();
+    this.lastActivityAt = Date.now();
 
     connection.send(
       JSON.stringify({
@@ -166,6 +171,10 @@ export class SarvamVoiceAgent extends VoiceAgent<Env> {
         runtime: "cloudflare",
       }),
     );
+
+    // Only greet once per call: reconnects re-send `start_call`.
+    if (this.greeted) return;
+    this.greeted = true;
 
     const firstMessage = config.config.firstMessage.trim();
     if (firstMessage.length > 0 && config.config.firstMessageMode !== "assistant-waits-for-user") {
@@ -178,6 +187,7 @@ export class SarvamVoiceAgent extends VoiceAgent<Env> {
   async onTurn(transcript: string, context: VoiceTurnContext) {
     const config = this.requireConfig();
     this.requireTts();
+    this.lastActivityAt = Date.now();
 
     const result = streamText({
       model: resolveModel(config.config.model, this.env),
@@ -191,12 +201,25 @@ export class SarvamVoiceAgent extends VoiceAgent<Env> {
       ],
       temperature: config.config.model.temperature,
       maxOutputTokens: config.config.model.maxTokens,
-      frequencyPenalty: 0.2,
-      presencePenalty: 0.2,
+      frequencyPenalty: 0.3,
+      presencePenalty: 0.4,
       abortSignal: context.signal,
     });
 
-    return stripLeadingGreeting(result.textStream);
+    return guardReplyStream(result.textStream, {
+      transcript,
+      spoken: [...this.spoken],
+    });
+  }
+
+  saveMessage(role: "user" | "assistant", text: string): void {
+    if (role === "assistant") {
+      this.spoken.push(text);
+      if (this.spoken.length > MAX_TRACKED_ASSISTANT_MESSAGES) {
+        this.spoken.shift();
+      }
+    }
+    super.saveMessage(role, text);
   }
 
   async onCallEnd(): Promise<void> {
@@ -240,6 +263,35 @@ export class SarvamVoiceAgent extends VoiceAgent<Env> {
       console.error("voice-runtime: call sync failed", {
         agentId: this.name,
         callId: this.callId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      this.callId = "";
+      this.startedAt = 0;
+      this.lastActivityAt = 0;
+      this.greeted = false;
+      this.spoken.length = 0;
+    }
+  }
+
+  /**
+   * One Durable Object per agent serves every call, so the mixin's message
+   * table would otherwise leak one caller's history into the next call and
+   * teach the model to repeat old greetings.
+   */
+  private resetConversation(): void {
+    if ([...this.getConnections()].length > 1) return;
+    try {
+      void this.sql`CREATE TABLE IF NOT EXISTS cf_voice_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        role TEXT NOT NULL,
+        text TEXT NOT NULL,
+        timestamp INTEGER NOT NULL
+      )`;
+      void this.sql`DELETE FROM cf_voice_messages`;
+    } catch (error) {
+      console.error("voice-runtime: could not reset conversation", {
+        agentId: this.name,
         error: error instanceof Error ? error.message : String(error),
       });
     }

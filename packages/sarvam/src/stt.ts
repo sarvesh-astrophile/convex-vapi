@@ -3,7 +3,9 @@ import type { SarvamLanguage, SarvamMode } from "./languages";
 
 const SARVAM_STT_URL = "https://api.sarvam.ai/speech-to-text/ws";
 const MAX_QUEUED_CHUNKS = 200;
-const DEFAULT_DEBOUNCE_MS = 350;
+// Sarvam emits short finals aggressively. Merging nearby finals into one turn
+// avoids fragments like "आप।" being answered as a full user message.
+const DEFAULT_DEBOUNCE_MS = 500;
 
 export type SarvamSttOptions = {
   apiKey: string;
@@ -13,6 +15,11 @@ export type SarvamSttOptions = {
   keyterms?: string[];
   /** Sarvam emits one final per phrase; combine nearby finals into one turn. */
   debounceMs?: number;
+  /**
+   * High VAD sensitivity ends utterances sooner (lower latency) but splits one
+   * sentence into several fragments. Off by default for conversational agents.
+   */
+  highVadSensitivity?: boolean;
   onUtterance: (text: string) => void;
   onError?: (error: Error) => void;
 };
@@ -73,7 +80,7 @@ export class SarvamSttSession {
     url.searchParams.set("mode", this.options.mode ?? "transcribe");
     url.searchParams.set("sample_rate", String(this.options.sampleRate ?? 16_000));
     url.searchParams.set("input_audio_codec", "pcm_s16le");
-    url.searchParams.set("high_vad_sensitivity", "true");
+    url.searchParams.set("high_vad_sensitivity", String(this.options.highVadSensitivity ?? false));
     if (this.options.keyterms && this.options.keyterms.length > 0) {
       url.searchParams.set("keyterms", JSON.stringify(this.options.keyterms));
     }

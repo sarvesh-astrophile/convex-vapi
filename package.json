@@ -23,6 +23,7 @@
   "type": "module",
   "scripts": {
     "dev": "vp run --parallel --filter web --filter @convex-vapi/backend dev",
+    "dev:all": "vp run --parallel --filter web --filter @convex-vapi/backend --filter @convex-vapi/infra-voice dev",
     "build": "vp run -r build",
     "check-types": "vp run -r check-types",
     "check": "vp check && vp run -r check-types",

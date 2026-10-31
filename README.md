@@ -185,6 +185,7 @@ convex-vapi/
 ## Available Scripts
 
 - `bun run dev`: Start all applications in development mode
+- `bun run dev:all`: Start web, Convex and the voice runtime in parallel
 - `bun run build`: Build all applications
 - `bun run dev:web`: Start only the web application
 - `bun run dev:setup`: Setup and configure your Convex project

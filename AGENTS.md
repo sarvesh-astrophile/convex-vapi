@@ -168,6 +168,7 @@ Auth wiring: Better Auth runs as a locally installed Convex component (`convex/b
 - `bun install` — also runs `postinstall` → Varlock codegen for `apps/web`.
 - `bun run dev:setup` — one-time Convex project setup. Then copy `VITE_CONVEX_URL` and `VITE_CONVEX_SITE_URL` from `packages/backend/.env.local` to `apps/web/.env`.
 - `bun run dev` — run `web` and `@kelasa/backend` in parallel (web on port 3001, plus Convex).
+- `bun run dev:all` — run `web`, `@kelasa/backend` and `@kelasa/infra-voice` in parallel (voice runtime on port 3011). Needs `packages/infra-voice/.env`.
 - `bun run dev:web` / `bun run dev:server` — run only web or only Convex.
 - `bun run dev:marketing` — run the independent TanStack Start marketing app on port 3002 with shared `@kelasa/ui`; no Convex or auth env required.
 - `bun run dev:infra` — alias for `dev:infra:web`.
