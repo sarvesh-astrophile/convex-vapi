@@ -6,8 +6,11 @@ import type { Id } from "./_generated/dataModel";
 import { httpAction } from "./_generated/server";
 import { authComponent, createAuth } from "./auth";
 import { hmacSha256Hex, timingSafeEqual } from "./lib/crypto";
+import { mcp } from "./mcp";
 
 const http = httpRouter();
+
+mcp.registerRoutes(http);
 
 const vapi = new Vapi(components.convexVapi, {
   apiKey: process.env.VAPI_API_KEY ?? "",

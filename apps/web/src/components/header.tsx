@@ -8,6 +8,7 @@ export default function Header() {
     { to: "/calls", label: "Vapi calls" },
     { to: "/sarvam/agents", label: "Sarvam" },
     { to: "/paytm-pos-failure", label: "Paytm POS" },
+    { to: "/auto", label: "Auto" },
     { to: "/dashboard", label: "Dashboard" },
   ] as const;
 

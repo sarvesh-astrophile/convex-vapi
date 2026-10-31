@@ -1,0 +1,5 @@
+customer_id,customer_name_synthetic,visits_this_month,total_spend_inr,loyalty_category
+CUST101,Sarvesh,7,7200,Frequent
+CUST102,Rahul,2,1150,Regular
+CUST103,Priya,2,1550,Regular
+CUST104,Amit,1,500,New

@@ -1,0 +1,4 @@
+opportunity_id,location,event_or_context,date,expected_time,opportunity_type,verification_note
+OP001,Christ University,Government exam ends,2026-10-31,17:00,Potential passenger demand,Illustrative; verify event and local demand before presenting as confirmed
+OP002,BTM Layout,Evening commuter movement,2026-10-31,17:00-20:00,Potential passenger demand,Illustrative local context; not verified live demand
+OP003,Majestic Bus Stand,Passenger arrivals,2026-10-31,17:00-20:00,Potential passenger demand,Illustrative local context; not verified live demand

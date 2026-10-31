@@ -1,0 +1,2 @@
+reminder_id,merchant_id,customer_id,customer_name_synthetic,requested_action,reminder_trigger,reminder_status,merchant_approval
+REM001,MER1002,CUST101,Sarvesh,Offer a discount,Next customer visit,Pending creation,Yes

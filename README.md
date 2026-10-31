@@ -73,6 +73,39 @@ chat returns an actionable error instead of failing silently.
 Assistant and phone number management stays in the Vapi dashboard; the
 component tracks calls, not the resources that place them.
 
+## Auto driver MCP
+
+`convex/mcp.ts` exposes a read-only MCP server for the bundled AUTO1001 demo
+export (`apps/web/public/data/auto_driver_*.csv`):
+
+- `get_earnings_summary` — headline earnings and trip stats.
+- `list_trips` — individual trips filtered by date/status.
+- `get_daily_earnings` — per-day earnings and trip counts.
+- `list_demand_opportunities` — illustrative, unverified demand windows.
+
+Server URL: `https://<deployment>.convex.site/mcp/auto`. Users sign in and approve
+the agent at `/connect`; connected agents and CLI API keys are managed in the
+dashboard's **Connected agents** card.
+
+Deploy the backend, then load the CSV rows once:
+
+```bash
+cd packages/backend
+bunx convex dev --once
+bun run seed:auto-driver
+```
+
+Mint a key for tests/CLI agents with:
+
+```bash
+bunx convex run mcp:createApiKeyForUser '{"userId":"<better-auth user id>"}'
+```
+
+`MCP_CONSENT_URL` overrides the consent page URL; it defaults to
+`$SITE_URL/connect`. The MCP data is shared demo data, not user-owned: any
+signed-in user connected with the `auto:read` scope sees the same AUTO1001
+export.
+
 ## Sarvam runtime (separate pages)
 
 The Sarvam browser runtime is unchanged but now lives under its own section:

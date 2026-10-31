@@ -248,4 +248,33 @@ export default defineSchema({
   })
     .index("by_eventId", ["eventId"])
     .index("by_callId_and_receivedAt", ["callId", "receivedAt"]),
+
+  /** Bundled demo data for the Auto driver MCP server (`autoDriver.ts`). */
+  autoDriverTransactions: defineTable({
+    transactionId: v.string(),
+    driverId: v.string(),
+    /** ISO date, YYYY-MM-DD. */
+    date: v.string(),
+    time: v.string(),
+    pickupLocation: v.string(),
+    fareInr: v.number(),
+    status: v.union(v.literal("Success"), v.literal("No trip")),
+  })
+    .index("by_transactionId", ["transactionId"])
+    .index("by_driverId_and_date", ["driverId", "date"]),
+
+  /** Illustrative demand windows; not verified live demand. */
+  autoDriverOpportunities: defineTable({
+    opportunityId: v.string(),
+    location: v.string(),
+    eventOrContext: v.string(),
+    /** ISO date, YYYY-MM-DD. */
+    date: v.string(),
+    expectedTime: v.string(),
+    opportunityType: v.string(),
+    verificationNote: v.string(),
+  })
+    .index("by_opportunityId", ["opportunityId"])
+    .index("by_date", ["date"])
+    .index("by_location_and_date", ["location", "date"]),
 });

@@ -1,5 +1,6 @@
 import agent from "@convex-dev/agent/convex.config";
 import betterAuth from "@convex-dev/better-auth/convex.config";
+import mcp from "@convex-dev/mcp/convex.config.js";
 import rateLimiter from "@convex-dev/rate-limiter/convex.config";
 import convexVapi from "convex-vapi/convex.config";
 import { defineApp } from "convex/server";
@@ -9,5 +10,6 @@ app.use(betterAuth);
 app.use(rateLimiter);
 app.use(agent);
 app.use(convexVapi);
+app.use(mcp);
 
 export default app;

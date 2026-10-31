@@ -8,7 +8,13 @@ import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
 
-export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () => void }) {
+export default function SignUpForm({
+  onSwitchToSignIn,
+  onSuccess,
+}: {
+  onSwitchToSignIn: () => void;
+  onSuccess?: () => void;
+}) {
   const navigate = useNavigate({
     from: "/",
   });
@@ -28,10 +34,14 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
         },
         {
           onSuccess: () => {
+            toast.success("Sign up successful");
+            if (onSuccess) {
+              onSuccess();
+              return;
+            }
             navigate({
               to: "/dashboard",
             });
-            toast.success("Sign up successful");
           },
           onError: (error) => {
             toast.error(error.error.message || error.error.statusText);
