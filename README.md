@@ -278,6 +278,12 @@ Each stack has its own schema and state: `packages/infra-web` for the web
 worker and `packages/infra-voice` for the voice runtime. The runtime is also
 available during local emulation with `bun run dev:infra:voice`.
 
+`packages/infra-web/.env.schema` imports `VITE_CONVEX_URL` and
+`VITE_CONVEX_SITE_URL` from `apps/web/.env`. To deploy the web worker against a
+different Convex deployment without changing local dev, add those two
+variables to a gitignored `packages/infra-web/.env`; local values take
+precedence over the imported ones.
+
 `alchemy profile edit` stores the selected Axiom, Cloudflare, Neon, PlanetScale, and/or Prisma provider profiles under `~/.alchemy`; no provider-specific setup command is required by this scaffold.
 
 Deploys are staged and default to a personal `dev_<username>` stage. For production, run the deploy with an explicit stage from the owning stack:
