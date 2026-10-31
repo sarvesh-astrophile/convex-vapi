@@ -52,6 +52,7 @@ kelasa/
 │       │   │   ├── sign-up-form.tsx  # Email/password sign-up form
 │       │   │   ├── user-menu.tsx  # Signed-in user menu/logout
 │       │   │   ├── paytm-pos/     # Paytm POS demo + iPhone call dialog
+│       │   │   ├── vapi-builder/  # Chat copilot + editable assistant draft
 │       │   │   ├── workspace-panel.tsx    # Workspace, members, invites dashboard
 │       │   │   └── workspace-switcher.tsx # Active workspace switcher
 │       │   ├── env.public.ts      # Client-safe env accessor (import.meta.env)
@@ -71,6 +72,8 @@ kelasa/
 │       │       ├── index.tsx      # Home page and API health check
 │       │       ├── _auth/         # Protected route group
 │       │       │   ├── route.tsx  # Auth-gated layout with sign-in/up fallback
+│       │       │   ├── agents.index.tsx   # Vapi assistant builder list
+│       │       │   ├── agents.$assistantId.tsx  # Chat + draft + publish
 │       │       │   ├── dashboard.tsx  # Workspace dashboard (members/invites)
 │       │       │   ├── voice.tsx  # Vapi outbound dialer
 │       │       │   ├── calls.index.tsx    # Vapi call history
@@ -115,15 +118,20 @@ kelasa/
 │   │       │   └── schema.ts      # Hand-maintained Better Auth + organization tables
 │   │       ├── agents.ts          # Agent builder list/create/save/publish
 │   │       ├── calls.ts           # Sarvam call lifecycle + metering
-│   │       ├── convex.config.ts   # Registers betterAuth + rateLimiter + convex-vapi components
+│   │       ├── convex.config.ts   # Registers betterAuth, rateLimiter, agent, convex-vapi
 │   │       ├── healthCheck.ts     # Public "OK" health query
 │   │       ├── http.ts            # Registers Better Auth, Vapi, and voice webhook routes
 │   │       ├── lib/
+│   │       │   ├── agentConfig.ts  # Sarvam agent config validator + copilot schema
+│   │       │   ├── aiErrors.ts     # Convex AI Gateway error normalization
+│   │       │   ├── vapiAssistantConfig.ts  # Vapi draft validator + copilot tool schema
 │   │       │   └── workspaceAuth.ts  # requireWorkspaceMember/requireRole guards
 │   │       ├── privateData.ts     # Auth-gated query example
 │   │       ├── rateLimits.ts      # Named rate limits
-│   │       ├── schema.ts          # App tables (incl. vapiCalls ownership)
+│   │       ├── schema.ts          # App tables (incl. vapiCalls, vapiAssistants)
 │   │       ├── vapi.ts            # Vapi calls scoped to a workspace
+│   │       ├── vapiAssistants.ts  # Vapi draft CRUD + publish to the Vapi API
+│   │       ├── vapiBuilder.ts     # Convex Agent chat + updateDraft tool
 │   │       ├── voice.ts           # Call tokens and runtime config
 │   │       ├── voiceWebhook.ts    # HMAC-verified runtime event ingestion
 │   │       ├── workspaces.ts      # Workspace list/create/switch/members/invites
@@ -181,7 +189,7 @@ kelasa/
 
 Auth wiring: Better Auth runs as a locally installed Convex component (`convex/betterAuth`) with the `organization` plugin. HTTP routes are registered in `convex/http.ts` and proxied by `apps/web/src/routes/api/auth/$.ts`; token/fetch helpers live in `apps/web/src/lib/auth-server.ts`. Workspace authorization helpers live in `convex/lib/workspaceAuth.ts`.
 
-Voice surfaces: `/voice` and `/calls` are Vapi (`convex-vapi` component, `convex/vapi.ts`, webhook at `/webhooks/vapi`). `/sarvam/*` is the Cloudflare + Sarvam runtime (`agents`, `voice`, `calls`). The component's own `calls`/`webhookEvents` tables are not workspace-scoped; the app `vapiCalls` table is the tenancy boundary, so never expose component queries directly to clients.
+Voice surfaces: `/agents` is the Vapi assistant builder (Convex Agent copilot + `convex/vapiAssistants.ts` publish), `/voice` and `/calls` are Vapi (`convex-vapi` component, `convex/vapi.ts`, webhook at `/webhooks/vapi`). `/sarvam/*` is the Cloudflare + Sarvam runtime (`agents`, `voice`, `calls`). The component's own `calls`/`webhookEvents` tables are not workspace-scoped; the app `vapiCalls` table is the tenancy boundary, so never expose component queries directly to clients. Builder drafts live in `vapiAssistants`; Vapi remains the source of truth for published assistants.
 
 ## Commands
 
@@ -213,7 +221,8 @@ Voice surfaces: `/voice` and `/calls` are Vapi (`convex-vapi` component, `convex
 - Client code imports `ENV` from `src/env.public.ts`; server-only code imports `src/env.ts`.
 - `packages/infra-web/.env.schema` imports its Convex vars from `apps/web`; `packages/infra-voice/.env.schema` is independent and holds the Sarvam key and voice sync secret. Run Varlock-dependent tools from the owning stack directory.
 - `packages/backend/convex/auth.ts` reads `SITE_URL` and `BETTER_AUTH_SECRET` from the Convex deployment environment. They are not part of `apps/web/.env`; set them with `bunx convex env set` or in the Convex dashboard.
-- Vapi reads `VAPI_API_KEY` and `VAPI_WEBHOOK_SECRET` from the Convex deployment environment. The webhook is `https://<deployment>.convex.site/webhooks/vapi`; `VITE_VAPI_PUBLIC_KEY` enables in-browser voice agents (for example the Paytm POS iPhone call dialog), and `VITE_VAPI_ASSISTANT_ID`, `VITE_VAPI_PHONE_NUMBER_ID`, and `VITE_VAPI_PAYTM_ASSISTANT_ID` are public defaults.
+- Vapi reads `VAPI_API_KEY` and `VAPI_WEBHOOK_SECRET` from the Convex deployment environment. The webhook is `https://<deployment>.convex.site/webhooks/vapi`; `VITE_VAPI_PUBLIC_KEY` enables in-browser voice agents (for example the Paytm POS iPhone call dialog), and `VITE_VAPI_ASSISTANT_ID`, `VITE_VAPI_PHONE_NUMBER_ID`, and `VITE_VAPI_PAYTM_ASSISTANT_ID` are public defaults. The `/agents` builder uses the same `VAPI_API_KEY` to create/update assistants and sets the assistant's `serverUrl` + `server.secret` to the webhook above.
+- The `/agents` copilot uses the Convex Agent component and Convex AI Gateway (`convexGateway`), not an OpenAI key. It requires a paid Convex plan; `convex/lib/aiErrors.ts` turns the gateway-disabled error into an actionable message.
 - The voice runtime's LLM credentials live in `packages/infra-voice/.env`: `OPENAI_API_KEY` for direct OpenAI, or `CLOUDFLARE_AI_GATEWAY_URL` + `CLOUDFLARE_AI_GATEWAY_TOKEN` for OpenAI through Cloudflare AI Gateway. Never bind these into the web app.
 - Better Auth rate limiting uses the local component's `rateLimit` table (`storage: "database"`), so counters survive across Convex workers.
 - Dodo Payments will use `DODO_PAYMENTS_API_KEY`, `DODO_PAYMENTS_ENVIRONMENT`, and `DODO_PAYMENTS_WEBHOOK_SECRET` in the Convex deployment environment when billing is implemented.
@@ -226,6 +235,7 @@ Voice surfaces: `/voice` and `/calls` are Vapi (`convex-vapi` component, `convex
 - Active workspace: `activeWorkspaces` is the server-side pointer used by billing and other server flows. Update it in the same mutation that calls `auth.api.setActiveOrganization`, creates a workspace, or accepts an invitation. `workspaces.list` falls back to the first membership when no valid pointer exists.
 - Local Better Auth specifics: keep `advanced.database.generateId: false` (Convex generates ids; otherwise invitation inserts fail), and keep `requireEmailVerificationOnInvitation: false` until email verification exists. Pending invitations are read through `components.betterAuth.queries.listPendingInvitationsByEmail` because Better Auth's client endpoint requires a verified email. `convex/betterAuth/auth.ts` exists only for CLI schema generation; never import it at runtime.
 - Rate limiting: define application limits in `convex/rateLimits.ts` and call `rateLimiter.limit(ctx, name, { key, throws: true })`. Key by workspace/user/command, never a single global bucket. Auth routes use Better Auth's built-in limiter with database storage; do not duplicate it or hand-roll counters.
+- Vapi builder: `vapiAssistants` is the workspace-scoped draft. `vapiBuilderThreads` maps one Convex Agent thread per user + draft; never expose component messages directly, read them through `vapiBuilder.messages`. The `updateDraft` tool is the only writer of chat-driven draft changes. Publishing is the only place that creates/updates the live Vapi assistant (`POST /assistant` first, `PATCH /assistant/{id}` afterwards) and it must keep pointing `serverUrl`/`server.secret` at `/webhooks/vapi` so call history stays scoped through `vapiCalls`.
 - Billing (planned): use the `@dodopayments/convex` component, one Dodo customer per workspace, and keep entitlement checks in the shared billing module. Webhooks are the only writer of subscription state and must be idempotent. Do not use the Better Auth Dodo plugin or bill individual users.
 - `apps/web/vite.config.ts` raises Node's Happy Eyeballs timeout to 1s. Keep it: on WSL/broken-IPv6 networks the 250ms default makes SSR fetches to Convex fail with `fetch failed`.
 - Add shared shadcn components from the repo root: `npx shadcn@latest add <component> -c packages/ui`. Add app-only blocks from `apps/web`.

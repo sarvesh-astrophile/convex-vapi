@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 export default function Header() {
   const links = [
     { to: "/", label: "Home" },
+    { to: "/agents", label: "Vapi builder" },
     { to: "/voice", label: "Vapi call" },
     { to: "/calls", label: "Vapi calls" },
     { to: "/sarvam/agents", label: "Sarvam" },

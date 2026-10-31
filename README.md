@@ -20,12 +20,12 @@ First, install the dependencies:
 bun install
 ```
 
-## Vapi calls (web app)
+## Vapi (web app)
 
-The web app's `/voice` and `/calls` pages use the
-[`convex-vapi`](https://www.convex.dev/components/convex-vapi) component for
-outbound phone calls:
+The web app has three Vapi surfaces:
 
+- `/agents` — the voice-agent builder. Create a draft, chat with the builder
+  copilot to design it, review the generated Vapi configuration, and publish.
 - `/voice` — dialer for any assistant in the Vapi account, plus the Vapi phone
   number and E.164 customer number, live workspace stats, and recent calls.
 - `/calls` — reactive Vapi call history and per-call detail (status, transcript,
@@ -33,6 +33,18 @@ outbound phone calls:
 - `/paytm-pos-failure` — clicking **Need help?** / **Contact customer** opens an
   iPhone-style ringing dialog; answering starts the Vapi browser voice agent
   backed by the Paytm help assistant.
+
+### Agent builder
+
+The builder copilot is a Convex Agent (`@convex-dev/agent`) backed by the
+Convex AI Gateway (`convexGateway`). Each chat turn can call an `updateDraft`
+tool that writes the complete Vapi assistant configuration into
+`vapiAssistants`. Publishing uses the Vapi REST API (`POST /assistant` the first
+time, `PATCH /assistant/{id}` afterwards) and automatically configures the
+assistant's `serverUrl` and `server.secret` for the `/webhooks/vapi` route.
+
+The Convex AI Gateway requires a paid Convex plan. If it is not enabled, the
+chat returns an actionable error instead of failing silently.
 
 ### Setup
 

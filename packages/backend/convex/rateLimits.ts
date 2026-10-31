@@ -27,4 +27,16 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
     period: MINUTE,
     capacity: 2,
   },
+  vapiBuilder: {
+    kind: "token bucket",
+    rate: 20,
+    period: MINUTE,
+    capacity: 5,
+  },
+  publishVapiAssistant: {
+    kind: "token bucket",
+    rate: 6,
+    period: MINUTE,
+    capacity: 2,
+  },
 });

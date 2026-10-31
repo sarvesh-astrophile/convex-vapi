@@ -75,6 +75,24 @@ function HomeComponent() {
 
           <Card>
             <CardHeader>
+              <CardTitle>Vapi agent builder</CardTitle>
+              <CardDescription>
+                Describe a voice assistant in chat, review the generated Vapi configuration, and
+                publish it to your Vapi account.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-2">
+              <Link to="/agents" className={buttonVariants({ size: "sm" })}>
+                Open builder
+              </Link>
+              <Link to="/voice" className={buttonVariants({ variant: "outline", size: "sm" })}>
+                Voice dialer
+              </Link>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
               <CardTitle>Sarvam runtime</CardTitle>
               <CardDescription>
                 The separate Cloudflare + Sarvam browser voice stack, including the agent builder.

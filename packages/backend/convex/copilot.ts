@@ -1,11 +1,12 @@
 import { Agent, createThread } from "@convex-dev/agent";
 import { convexGateway } from "@convex-dev/ai-sdk-provider";
 import { Output } from "ai";
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 
 import { components, internal } from "./_generated/api";
 import { action, internalMutation, internalQuery } from "./_generated/server";
 import { generatedAgentConfigSchema, type GeneratedAgentConfig } from "./lib/agentConfig";
+import { throwAiGatewayError } from "./lib/aiErrors";
 import { rateLimiter } from "./rateLimits";
 
 const builderAgent = new Agent(components.agent, {
@@ -14,30 +15,6 @@ const builderAgent = new Agent(components.agent, {
   instructions:
     "You help product builders design Sarvam voice agents running on Cloudflare Agents. Suggest concise system prompts, first messages, LLM settings, Sarvam voice/transcriber choices, and tool schemas. Return practical text. Do not invent Cloudflare or Sarvam API endpoints.",
 });
-
-function throwCopilotError(error: unknown): never {
-  const message = error instanceof Error ? error.message : String(error);
-  const normalized = message.toLowerCase();
-  if (
-    normalized.includes("gateway is not enabled") ||
-    normalized.includes("ai gateway") ||
-    normalized.includes("upgrade to a paid plan") ||
-    normalized.includes("aigatewaydisabled") ||
-    normalized.includes("aigatewayunavailable") ||
-    normalized.includes("spendinglimitexceeded") ||
-    normalized.includes("teamsuspended")
-  ) {
-    throw new ConvexError({
-      code: "COPILOT_NOT_CONFIGURED",
-      message:
-        "Convex AI Gateway is not enabled for this team. It requires a paid Convex plan. Enable AI Gateway in the Convex dashboard or upgrade the team, then retry.",
-    });
-  }
-  throw new ConvexError({
-    code: "COPILOT_FAILED",
-    message: `Copilot request failed: ${message.slice(0, 300)}`,
-  });
-}
 
 export const assertMember = internalQuery({
   args: {
@@ -170,7 +147,7 @@ export const chat = action({
         },
       );
     } catch (error) {
-      throwCopilotError(error);
+      throwAiGatewayError(error, "Copilot");
     }
 
     return { threadId, text: result.text };
@@ -241,7 +218,7 @@ ${prompt}`,
 
       return result.output as GeneratedAgentConfig;
     } catch (error) {
-      throwCopilotError(error);
+      throwAiGatewayError(error, "Copilot");
     }
   },
 });

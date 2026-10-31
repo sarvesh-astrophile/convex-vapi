@@ -3,6 +3,7 @@ import { v } from "convex/values";
 
 import { agentConfigValidator } from "./lib/agentConfig";
 import { callStatusValidator } from "./lib/callStatus";
+import { vapiAssistantConfigValidator } from "./lib/vapiAssistantConfig";
 
 const legacyRuntimeValidator = v.union(v.literal("vapi"), v.literal("cloudflare"));
 
@@ -132,6 +133,42 @@ export default defineSchema({
   })
     .index("by_callId", ["callId"])
     .index("by_workspaceId_and_createdAt", ["workspaceId", "createdAt"]),
+
+  /**
+   * Assistant drafts authored in the builder. Vapi owns the live assistant;
+   * `vapiAssistantId` links the draft to the assistant created on publish.
+   */
+  vapiAssistants: defineTable({
+    workspaceId: v.id("workspaces"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    status: v.union(v.literal("draft"), v.literal("published"), v.literal("archived")),
+    config: vapiAssistantConfigValidator,
+    vapiAssistantId: v.optional(v.string()),
+    /** Config last pushed to Vapi, for detecting unpublished edits. */
+    publishedConfig: v.optional(vapiAssistantConfigValidator),
+    publishedAt: v.optional(v.number()),
+    createdBy: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_workspaceId_and_updatedAt", ["workspaceId", "updatedAt"])
+    .index("by_vapiAssistantId", ["vapiAssistantId"]),
+
+  /**
+   * Maps a builder conversation to a draft. The Convex Agent component owns
+   * the messages; this table only records which thread belongs to whom.
+   */
+  vapiBuilderThreads: defineTable({
+    assistantId: v.id("vapiAssistants"),
+    workspaceId: v.id("workspaces"),
+    userId: v.string(),
+    threadId: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_assistantId_and_userId", ["assistantId", "userId"])
+    .index("by_threadId", ["threadId"]),
 
   callTurns: defineTable({
     callId: v.string(),
