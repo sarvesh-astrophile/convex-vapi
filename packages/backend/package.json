@@ -16,6 +16,7 @@
     "ai": "^7.0.157",
     "better-auth": "catalog:",
     "convex": "catalog:",
+    "convex-vapi": "0.0.5",
     "zod": "catalog:"
   },
   "devDependencies": {

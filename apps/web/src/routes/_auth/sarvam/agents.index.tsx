@@ -14,7 +14,7 @@ import { Loader2, Plus } from "lucide-react";
 import { useActiveWorkspace, useWorkspaces } from "@/hooks/use-active-workspace";
 import { formatTimestamp } from "@/lib/format";
 
-export const Route = createFileRoute("/_auth/agents/")({
+export const Route = createFileRoute("/_auth/sarvam/agents/")({
   component: AgentsPage,
 });
 
@@ -37,9 +37,9 @@ function AgentsPage() {
     <div className="mx-auto grid w-full max-w-[1280px] gap-6 px-4 pb-8 pt-4">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-xl font-medium">Agents</h1>
+          <h1 className="text-xl font-medium">Sarvam agents</h1>
           <p className="text-muted-foreground text-sm">
-            Build voice agents in Convex and publish them to the Cloudflare runtime.
+            Build Sarvam voice agents in Convex and publish them to the Cloudflare runtime.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -60,7 +60,7 @@ function AgentsPage() {
           ) : (
             <span className="text-muted-foreground text-xs">{workspace.name}</span>
           )}
-          <Link to="/agents/new" className={buttonVariants({ size: "sm" })}>
+          <Link to="/sarvam/agents/new" className={buttonVariants({ size: "sm" })}>
             <Plus /> New agent
           </Link>
         </div>
@@ -86,7 +86,7 @@ function AgentsPage() {
                 Create an assistant, publish it, and test it with your microphone.
               </p>
               <Link
-                to="/agents/new"
+                to="/sarvam/agents/new"
                 className={buttonVariants({ variant: "outline", size: "sm", className: "mt-4" })}
               >
                 <Plus /> Create your first agent
@@ -97,7 +97,7 @@ function AgentsPage() {
               {agents.map((agent) => (
                 <li key={agent._id}>
                   <Link
-                    to="/agents/$agentId"
+                    to="/sarvam/agents/$agentId"
                     params={{ agentId: agent._id }}
                     className="hover:bg-muted/50 grid gap-2 rounded-sm px-2 py-4 transition-colors sm:grid-cols-[1fr_auto]"
                   >

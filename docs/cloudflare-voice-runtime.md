@@ -200,7 +200,7 @@ Point the web app at the local runtime:
 VITE_VOICE_RUNTIME_URL=http://localhost:3011
 ```
 
-Then open `/agents`, create an agent, choose **Use Sarvam stack**, publish, and
+Then open `/sarvam/agents`, create an agent, choose **Use Sarvam stack**, publish, and
 click **Test call**.
 
 ## Deployment
@@ -238,12 +238,39 @@ one sentence is not split into several turns.
 
 ## Observability
 
-- `callUsage.firstAudioMs` is measured from the turn start to the first
-  completed TTS synthesis, so a model or TTS regression shows up without a
-  device test.
+- The voice page shows a **Latency** card driven by the SDK's per-turn
+  `VoiceTurnMetrics`: reply latency (finalized transcript → first server audio),
+  STT finalization, model first token, TTS first audio, turn total, and a
+  rolling history of the last 12 turns. All values are measured server-side in
+  the Durable Object on one clock; browser playback and network transit are
+  excluded.
+- It also shows the runtime's own metering from `callUsage` (`firstAudioMs`,
+  `llmMs`, `ttsMs`, TTS characters, tokens), which lands in Convex about once a
+  second while the call runs. This survives the call; the in-memory turn
+  history does not.
+- `Start → call active` on the same card covers mint, socket connect, token
+  exchange, and config load, so a slow cold start is visible separately from a
+  slow reply.
 - `callSessions` and `calls.agentVersionId` make it possible to attribute a
   quality change to a specific publish.
-- `calls.get` returns turns, events and usage for the call detail page.
+- `calls.get` returns turns, events and usage for the call detail page, which
+  repeats the persisted timings after the call ends.
+
+### Pointing the web app at a deployed runtime
+
+`apps/web/.env` must match where the runtime actually runs:
+
+```env
+# deployed Worker (copy the URL printed by `bun run deploy:voice`)
+VITE_VOICE_RUNTIME_URL=https://convex-vapi-voice-runtime-<hash>.<account>.workers.dev
+
+# local emulator (bun run dev:infra:voice)
+VITE_VOICE_RUNTIME_URL=http://localhost:3011
+```
+
+A `ws://localhost:3011` failure in the browser console means the web app is
+still pointing at the local emulator. Vite reads env at startup, so restart the
+dev server after changing it. The Worker answers `/healthz`.
 
 ## Current limits
 

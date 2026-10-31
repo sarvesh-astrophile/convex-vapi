@@ -232,7 +232,7 @@ export function AgentForm({
       } else {
         const id = await createAgent({ workspaceId, ...payload });
         toast.success("Agent created");
-        await navigate({ to: "/agents/$agentId", params: { agentId: id } });
+        await navigate({ to: "/sarvam/agents/$agentId", params: { agentId: id } });
       }
     } catch (error) {
       toast.error(errorMessage(error));
@@ -262,7 +262,7 @@ export function AgentForm({
       );
 
       if (!agentId) {
-        await navigate({ to: "/agents/$agentId", params: { agentId: id } });
+        await navigate({ to: "/sarvam/agents/$agentId", params: { agentId: id } });
       }
     } catch (error) {
       toast.error(errorMessage(error));
@@ -283,7 +283,7 @@ export function AgentForm({
     try {
       await archiveAgent({ agentId });
       toast.success("Agent archived");
-      await navigate({ to: "/agents" });
+      await navigate({ to: "/sarvam/agents" });
     } catch (error) {
       toast.error(errorMessage(error));
     } finally {
@@ -864,7 +864,7 @@ export function AgentForm({
         </Button>
         {agentId ? (
           <Link
-            to="/voice"
+            to="/sarvam/voice"
             search={{ agent: agentId }}
             className={buttonVariants({ variant: "outline" })}
           >

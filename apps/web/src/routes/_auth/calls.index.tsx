@@ -12,18 +12,18 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { Loader2, Phone } from "lucide-react";
 
 import { useActiveWorkspace } from "@/hooks/use-active-workspace";
-import { formatDuration, formatTimestamp } from "@/lib/format";
+import { formatCost, formatDuration, formatTimestamp } from "@/lib/format";
 
 export const Route = createFileRoute("/_auth/calls/")({
-  component: CallsPage,
+  component: VapiCallsPage,
 });
 
-function CallsPage() {
+function VapiCallsPage() {
   const { isAuthenticated } = useConvexAuth();
   const { workspace } = useActiveWorkspace();
   const calls = useQuery(
-    api.calls.list,
-    isAuthenticated ? { limit: 50, workspaceId: workspace?._id } : "skip",
+    api.vapi.list,
+    isAuthenticated && workspace ? { workspaceId: workspace._id, limit: 50 } : "skip",
   );
 
   return (
@@ -31,9 +31,10 @@ function CallsPage() {
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div>
-            <CardTitle>Call history</CardTitle>
+            <CardTitle>Vapi call history</CardTitle>
             <CardDescription>
-              Every voice call belonging to your account, newest first.
+              Outbound calls placed from this workspace, newest first. Status and reports update as
+              Vapi delivers webhooks.
             </CardDescription>
           </div>
           <Link to="/voice" className={buttonVariants({ size: "sm" })}>
@@ -47,18 +48,21 @@ function CallsPage() {
             </div>
           ) : calls.length === 0 ? (
             <div className="py-16 text-center">
-              <p className="text-sm font-medium">No calls yet</p>
+              <p className="text-sm font-medium">No Vapi calls yet</p>
               <p className="text-muted-foreground mt-1 text-sm">
-                Start a browser call and it will appear here.
+                Place an outbound call and it will appear here immediately.
               </p>
-              <Link to="/voice" className={buttonVariants({ variant: "outline", size: "sm" })}>
-                Open the voice agent
+              <Link
+                to="/voice"
+                className={buttonVariants({ variant: "outline", size: "sm", className: "mt-4" })}
+              >
+                Open the dialer
               </Link>
             </div>
           ) : (
             <ul className="divide-y">
-              {calls.map((call) => (
-                <li key={call._id}>
+              {calls.map(({ call, owner }) => (
+                <li key={call.callId}>
                   <Link
                     to="/calls/$callId"
                     params={{ callId: call.callId }}
@@ -66,11 +70,11 @@ function CallsPage() {
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">
-                        {call.summary ?? "Untitled call"}
+                        {call.summary ?? `Call to ${owner.customerNumber}`}
                       </p>
                       <p className="text-muted-foreground mt-1 truncate text-xs">
-                        {formatTimestamp(call.createdAt)} ·{" "}
-                        {formatDuration(call.startedAt, call.endedAt)}
+                        {formatTimestamp(call.startedAt ?? call.createdAt)} ·{" "}
+                        {formatDuration(call.startedAt, call.endedAt)} · {formatCost(call.cost)}
                       </p>
                     </div>
                     <div className="text-muted-foreground flex items-center gap-3 text-xs sm:justify-end">

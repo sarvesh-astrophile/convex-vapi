@@ -5,7 +5,10 @@ import { useMutation } from "convex/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ENV } from "@/env.public";
-import type { ConnectionState, LiveTurn } from "@/lib/voice-types";
+import type { ConnectionState, LiveTurn, PipelineLatency, TurnLatency } from "@/lib/voice-types";
+
+/** Turns kept for the latency strip. Enough to see a trend, not a table. */
+const MAX_LATENCY_HISTORY = 12;
 
 export type CloudflareVoiceOptions = {
   agentId: string;
@@ -44,9 +47,13 @@ export function useCloudflareVoice({ agentId, workspaceId, enabled }: Cloudflare
   const [localError, setLocalError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [ended, setEnded] = useState(false);
+  const [latencyHistory, setLatencyHistory] = useState<TurnLatency[]>([]);
+  const [connectMs, setConnectMs] = useState<number | null>(null);
 
   const wantStartRef = useRef(false);
   const wasLiveRef = useRef(false);
+  const lastTurnIdRef = useRef<string | null>(null);
+  const requestedAtRef = useRef<number | null>(null);
 
   const mintCall = useMutation(api.calls.start);
 
@@ -105,10 +112,47 @@ export function useCloudflareVoice({ agentId, workspaceId, enabled }: Cloudflare
     setEnded(true);
   }, [isLive]);
 
+  // The SDK reports one terminal summary per turn; append it once per turnId.
+  const turnMetrics = voice.turnMetrics;
+  const pipelineMetrics = voice.metrics;
+
+  // Press Start -> call active (mint, socket, token exchange, config load).
+  useEffect(() => {
+    if (voice.status === "idle" || requestedAtRef.current === null) {
+      return;
+    }
+    setConnectMs(Date.now() - requestedAtRef.current);
+    requestedAtRef.current = null;
+  }, [voice.status]);
+
+  useEffect(() => {
+    if (!turnMetrics || lastTurnIdRef.current === turnMetrics.turnId) {
+      return;
+    }
+    lastTurnIdRef.current = turnMetrics.turnId;
+    setLatencyHistory((history) => [
+      ...history.slice(-(MAX_LATENCY_HISTORY - 1)),
+      {
+        turnId: turnMetrics.turnId,
+        outcome: turnMetrics.outcome,
+        at: Date.now(),
+        replyMs: turnMetrics.finalInputToFirstAudioMs ?? pipelineMetrics?.first_audio_ms,
+        sttFinalMs: turnMetrics.speechStartToFinalMs,
+        modelFirstTextMs: turnMetrics.modelToFirstTextMs,
+        ttsFirstAudioMs: turnMetrics.ttsToFirstAudioMs,
+        turnTotalMs: turnMetrics.turnTotalMs,
+      },
+    ]);
+  }, [turnMetrics, pipelineMetrics]);
+
   const start = useCallback(async () => {
     setLocalError(null);
     setEnded(false);
     setStarting(true);
+    setLatencyHistory([]);
+    lastTurnIdRef.current = null;
+    requestedAtRef.current = Date.now();
+    setConnectMs(null);
     wantStartRef.current = true;
 
     try {
@@ -152,6 +196,16 @@ export function useCloudflareVoice({ agentId, workspaceId, enabled }: Cloudflare
     ? { id: "partial", role: "user", text: voice.interimTranscript }
     : null;
 
+  const latestLatency = latencyHistory.at(-1) ?? null;
+  const latency: PipelineLatency | null = pipelineMetrics
+    ? {
+        llmMs: pipelineMetrics.llm_ms,
+        ttsMs: pipelineMetrics.tts_ms,
+        firstAudioMs: pipelineMetrics.first_audio_ms,
+        totalMs: pipelineMetrics.total_ms,
+      }
+    : null;
+
   return {
     configured,
     connection,
@@ -161,6 +215,11 @@ export function useCloudflareVoice({ agentId, workspaceId, enabled }: Cloudflare
     partial,
     callId: session?.callId ?? null,
     isLive,
+    runtimeUrl: ENV.VITE_VOICE_RUNTIME_URL,
+    latestLatency,
+    latency,
+    latencyHistory,
+    connectMs,
     start,
     stop,
     toggleMute: voice.toggleMute,

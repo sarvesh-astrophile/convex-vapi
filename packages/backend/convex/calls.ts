@@ -177,6 +177,40 @@ export const get = query({
 });
 
 /**
+ * Metering for one call. Subscribed to by the live voice page so latency
+ * numbers appear as the runtime flushes events, without pulling the transcript
+ * and event log through `calls.get` on every batch.
+ */
+export const usageForCall = query({
+  args: { callId: v.string() },
+  handler: async (ctx, args) => {
+    const userId = await getUserId(ctx);
+    if (!userId) {
+      return null;
+    }
+    const call = await findCallByCallId(ctx, args.callId);
+    if (!call) {
+      return null;
+    }
+
+    if (call.workspaceId) {
+      try {
+        await requireWorkspaceMember(ctx, call.workspaceId);
+      } catch {
+        return null;
+      }
+    } else if (call.userId !== userId) {
+      return null;
+    }
+
+    return await ctx.db
+      .query("callUsage")
+      .withIndex("by_callId", (q) => q.eq("callId", args.callId))
+      .unique();
+  },
+});
+
+/**
  * Metering read for the workspace. Bounded: enough rows for a dashboard, not a
  * billing-grade rollup (that belongs in an aggregate or a denormalized counter).
  */

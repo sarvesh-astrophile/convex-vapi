@@ -1,7 +1,15 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { api } from "@convex-vapi/backend/convex/_generated/api";
+import { buttonVariants } from "@convex-vapi/ui/components/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@convex-vapi/ui/components/card";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/")({
   component: HomeComponent,
@@ -45,6 +53,46 @@ function HomeComponent() {
             </span>
           </div>
         </section>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Vapi calls</CardTitle>
+              <CardDescription>
+                Place outbound phone calls and watch status, transcript, summary, and cost update
+                reactively.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-2">
+              <Link to="/voice" className={buttonVariants({ size: "sm" })}>
+                Place a call
+              </Link>
+              <Link to="/calls" className={buttonVariants({ variant: "outline", size: "sm" })}>
+                Call history
+              </Link>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Sarvam runtime</CardTitle>
+              <CardDescription>
+                The separate Cloudflare + Sarvam browser voice stack, including the agent builder.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-2">
+              <Link to="/sarvam/agents" className={buttonVariants({ size: "sm" })}>
+                Open agents
+              </Link>
+              <Link
+                to="/sarvam/voice"
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
+                Browser call
+              </Link>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

@@ -6,7 +6,7 @@ import { AgentForm } from "@/components/agent-form";
 import { useActiveWorkspace } from "@/hooks/use-active-workspace";
 import { DEFAULT_AGENT_CONFIG } from "@/lib/agent-defaults";
 
-export const Route = createFileRoute("/_auth/agents/new")({
+export const Route = createFileRoute("/_auth/sarvam/agents/new")({
   component: NewAgentPage,
 });
 
@@ -26,7 +26,7 @@ function NewAgentPage() {
     <div className="mx-auto grid w-full max-w-[1280px] gap-4 px-4 pb-8 pt-4">
       <div>
         <Link
-          to="/agents"
+          to="/sarvam/agents"
           className={buttonVariants({ variant: "ghost", size: "sm", className: "-ml-2" })}
         >
           <ArrowLeft /> Agents

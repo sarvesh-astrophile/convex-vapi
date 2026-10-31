@@ -1,6 +1,7 @@
 import { httpRouter } from "convex/server";
+import { Vapi } from "convex-vapi";
 
-import { internal } from "./_generated/api";
+import { components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { httpAction } from "./_generated/server";
 import { authComponent, createAuth } from "./auth";
@@ -8,7 +9,18 @@ import { hmacSha256Hex, timingSafeEqual } from "./lib/crypto";
 
 const http = httpRouter();
 
+const vapi = new Vapi(components.convexVapi, {
+  apiKey: process.env.VAPI_API_KEY ?? "",
+  webhookSecret: process.env.VAPI_WEBHOOK_SECRET ?? "",
+});
+
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
+
+http.route({
+  path: "/webhooks/vapi",
+  method: "POST",
+  handler: vapi.webhookHandler,
+});
 
 http.route({
   path: "/voice/config",

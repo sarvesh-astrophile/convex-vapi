@@ -1,6 +1,6 @@
 # Voice agent builder
 
-The builder at `/agents` is a workspace-scoped editor for versioned voice
+The builder at `/sarvam/agents` is a workspace-scoped editor for versioned voice
 agents. Agents run on the Cloudflare voice runtime with Sarvam STT/TTS and a
 selectable LLM.
 
@@ -13,7 +13,7 @@ selectable LLM.
       │
       ├─ Publish ─────► mark version live
       │
-      └─ Test call ───► /voice?agent=<id>
+      └─ Test call ───► /sarvam/voice?agent=<id>
 ```
 
 Publishing does not call an external provider. It marks the current version as

@@ -17,7 +17,7 @@ import { useActiveWorkspace } from "@/hooks/use-active-workspace";
 import { DEFAULT_AGENT_CONFIG } from "@/lib/agent-defaults";
 import { formatTimestamp } from "@/lib/format";
 
-export const Route = createFileRoute("/_auth/agents/$agentId")({
+export const Route = createFileRoute("/_auth/sarvam/agents/$agentId")({
   component: AgentDetailPage,
 });
 
@@ -47,7 +47,7 @@ function AgentDetailPage() {
           It may belong to another workspace or have been removed.
         </p>
         <Link
-          to="/agents"
+          to="/sarvam/agents"
           className={buttonVariants({ variant: "outline", size: "sm", className: "mt-4" })}
         >
           <ArrowLeft /> Back to agents
@@ -66,7 +66,7 @@ function AgentDetailPage() {
     <div className="mx-auto grid w-full max-w-[1280px] gap-4 px-4 pb-8 pt-4">
       <div className="flex items-center justify-between gap-2">
         <Link
-          to="/agents"
+          to="/sarvam/agents"
           className={buttonVariants({ variant: "ghost", size: "sm", className: "-ml-2" })}
         >
           <ArrowLeft /> Agents

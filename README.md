@@ -20,9 +20,56 @@ First, install the dependencies:
 bun install
 ```
 
-## Voice Agent (Cloudflare + Sarvam)
+## Vapi calls (web app)
 
-The voice runtime is a Cloudflare Worker using `agents/voice`. Each call runs in
+The web app's `/voice` and `/calls` pages use the
+[`convex-vapi`](https://www.convex.dev/components/convex-vapi) component for
+outbound phone calls:
+
+- `/voice` — dialer for any assistant in the Vapi account, plus the Vapi phone
+  number and E.164 customer number, live workspace stats, and recent calls.
+- `/calls` — reactive Vapi call history and per-call detail (status, transcript,
+  summary, cost, recording).
+- `/paytm-pos-failure` — clicking **Need help?** / **Contact customer** opens an
+  iPhone-style ringing dialog; answering starts the Vapi browser voice agent
+  backed by the Paytm help assistant.
+
+### Setup
+
+1. Set the Vapi secrets on the Convex deployment:
+
+   ```bash
+   cd packages/backend
+   bunx convex env set VAPI_API_KEY "<private key from Vapi>"
+   bunx convex env set VAPI_WEBHOOK_SECRET "<random secret you choose>"
+   ```
+
+2. Point each Vapi assistant's server URL at
+   `https://<deployment>.convex.site/webhooks/vapi` and set its server secret to
+   the same `VAPI_WEBHOOK_SECRET`.
+
+3. Add the browser-call public key and optional defaults to `apps/web/.env`:
+
+   ```env
+   VITE_VAPI_PUBLIC_KEY=<public key from Vapi>
+   VITE_VAPI_ASSISTANT_ID=assistant_...
+   VITE_VAPI_PHONE_NUMBER_ID=...
+   VITE_VAPI_PAYTM_ASSISTANT_ID=9df849b1-22a2-456b-b08e-e32aeaa26786
+   ```
+
+`VITE_VAPI_PAYTM_ASSISTANT_ID` defaults to the assistant id above when unset.
+Assistant and phone number management stays in the Vapi dashboard; the
+component tracks calls, not the resources that place them.
+
+## Sarvam runtime (separate pages)
+
+The Sarvam browser runtime is unchanged but now lives under its own section:
+
+- `/sarvam/agents` — the workspace-scoped agent builder.
+- `/sarvam/voice` — browser microphone call on the Cloudflare runtime.
+- `/sarvam/calls` — Sarvam call history and detail.
+
+The runtime is a Cloudflare Worker using `agents/voice`. Each call runs in
 a Durable Object with:
 
 - **STT:** Sarvam Saaras v4 over WebSocket
@@ -32,9 +79,9 @@ a Durable Object with:
 - **Persistence:** live transcript in Durable Object SQLite, synced to Convex
   when the call ends
 
-The workspace-scoped builder at `/agents` versions the prompt, model, voice,
-and transcriber, then publishes to the Cloudflare runtime. The copilot still
-uses the Convex AI Gateway.
+The workspace-scoped builder at `/sarvam/agents` versions the prompt, model,
+voice, and transcriber, then publishes to the Cloudflare runtime. The copilot
+still uses the Convex AI Gateway.
 
 See [docs/voice-agent-builder.md](docs/voice-agent-builder.md) for the builder
 and [docs/cloudflare-voice-runtime.md](docs/cloudflare-voice-runtime.md) for the
@@ -72,10 +119,11 @@ runtime.
    VITE_VOICE_AGENT_ID=<optional default agent id>
    ```
 
-5. Open an agent in the builder, choose **Use Sarvam stack**, publish, and
-   click **Test call**.
+5. Open an agent in the builder at `/sarvam/agents`, choose **Use Sarvam
+   stack**, publish, and click **Test call**.
 
-No external voice-platform key or assistant is required.
+No external voice-platform key or assistant is required for the Sarvam
+runtime. Vapi calls use the separate setup above.
 
 ## Convex Setup
 

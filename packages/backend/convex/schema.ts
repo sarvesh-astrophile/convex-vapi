@@ -115,6 +115,24 @@ export default defineSchema({
     .index("by_agentId_and_createdAt", ["agentId", "createdAt"])
     .index("by_status", ["status"]),
 
+  /**
+   * Maps a `convex-vapi` component call back to the workspace that placed it.
+   * The component's own tables are isolated and have no tenancy columns, so
+   * this is the authorization boundary for Vapi call history.
+   */
+  vapiCalls: defineTable({
+    callId: v.string(),
+    workspaceId: v.id("workspaces"),
+    userId: v.string(),
+    assistantId: v.string(),
+    phoneNumberId: v.string(),
+    customerNumber: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_callId", ["callId"])
+    .index("by_workspaceId_and_createdAt", ["workspaceId", "createdAt"]),
+
   callTurns: defineTable({
     callId: v.string(),
     /** Monotonic per call. Optional only so pre-migration rows stay valid. */
