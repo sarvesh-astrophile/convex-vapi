@@ -1,11 +1,27 @@
 import type { Env, LoadedAgentConfig } from "./env";
 
-export async function loadAgentConfig(env: Env, agentId: string): Promise<LoadedAgentConfig> {
-  const url = new URL("/voice/config", env.CONVEX_SITE_URL);
-  url.searchParams.set("agentId", agentId);
+export type ConfigRequest = {
+  callId: string;
+  token: string;
+};
 
+/**
+ * Loads the published config for one call. Authenticated by the per-call
+ * capability token minted in Convex, not by a shared runtime secret.
+ */
+export async function loadAgentConfig(
+  env: Env,
+  request: ConfigRequest,
+): Promise<LoadedAgentConfig> {
+  const url = new URL("/voice/config", env.CONVEX_SITE_URL);
+  url.searchParams.set("callId", request.callId);
+
+  // The token travels in a header so it does not land in request logs.
   const response = await fetch(url, {
-    headers: { "x-voice-secret": env.VOICE_SYNC_SECRET },
+    headers: {
+      accept: "application/json",
+      "x-voice-token": request.token,
+    },
   });
 
   if (!response.ok) {

@@ -2,205 +2,258 @@ import { v } from "convex/values";
 
 import type { Doc } from "./_generated/dataModel";
 import { internalMutation } from "./_generated/server";
+import { nextCallStatus } from "./lib/callStatus";
 
-export const recordEvent = internalMutation({
+const MAX_EVENTS_PER_DELIVERY = 200;
+const MAX_PAYLOAD_BYTES = 500_000;
+
+const eventValidator = v.object({
+  eventId: v.string(),
+  seq: v.number(),
+  type: v.string(),
+  at: v.number(),
+  role: v.optional(v.union(v.literal("user"), v.literal("assistant"))),
+  text: v.optional(v.string()),
+  status: v.optional(v.string()),
+  reason: v.optional(v.string()),
+  data: v.optional(v.string()),
+});
+
+const usageValidator = v.object({
+  turns: v.optional(v.number()),
+  sttAudioMs: v.optional(v.number()),
+  ttsCharacters: v.optional(v.number()),
+  promptTokens: v.optional(v.number()),
+  completionTokens: v.optional(v.number()),
+  llmMs: v.optional(v.number()),
+  ttsMs: v.optional(v.number()),
+  firstAudioMs: v.optional(v.number()),
+});
+
+/**
+ * Single transactional ingest for a batch of runtime events.
+ *
+ * Invariants:
+ * - A delivery is idempotent by `deliveryId` (transport-level dedupe).
+ * - Events are applied in `seq` order and anything at or below `lastSeq` is
+ *   skipped, so a retried or overlapping batch cannot duplicate turns.
+ * - A terminal call never regresses to an active status.
+ * - Sparse updates never clear richer data (patch only with defined fields).
+ */
+export const ingest = internalMutation({
   args: {
-    eventHash: v.string(),
-    eventType: v.string(),
-    callId: v.optional(v.string()),
+    deliveryId: v.string(),
     payload: v.string(),
+    callId: v.string(),
+    agentId: v.optional(v.id("agents")),
+    workspaceId: v.optional(v.id("workspaces")),
+    modelProvider: v.optional(v.string()),
+    modelName: v.optional(v.string()),
+    endedReason: v.optional(v.string()),
+    transcript: v.optional(v.string()),
+    endedAt: v.optional(v.number()),
+    events: v.array(eventValidator),
+    usage: v.optional(usageValidator),
   },
-  handler: async (ctx, args): Promise<{ duplicate: boolean }> => {
-    const existing = await ctx.db
+  handler: async (ctx, args): Promise<{ duplicate: boolean; applied: number }> => {
+    const alreadyDelivered = await ctx.db
       .query("webhookEvents")
-      .withIndex("by_eventHash", (q) => q.eq("eventHash", args.eventHash))
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.deliveryId))
       .unique();
 
-    if (existing) {
-      return { duplicate: true };
+    if (alreadyDelivered) {
+      return { duplicate: true, applied: 0 };
     }
 
     await ctx.db.insert("webhookEvents", {
-      eventHash: args.eventHash,
-      eventType: args.eventType,
+      eventId: args.deliveryId,
+      eventType: "voice-events",
       callId: args.callId,
-      payload: args.payload,
+      payload:
+        args.payload.length > MAX_PAYLOAD_BYTES
+          ? args.payload.slice(0, MAX_PAYLOAD_BYTES)
+          : args.payload,
       receivedAt: Date.now(),
     });
 
-    return { duplicate: false };
-  },
-});
-
-/** Removes a dedupe marker so the runtime's retry can reprocess a failed delivery. */
-export const forgetEvent = internalMutation({
-  args: { eventHash: v.string() },
-  handler: async (ctx, args): Promise<null> => {
-    const existing = await ctx.db
-      .query("webhookEvents")
-      .withIndex("by_eventHash", (q) => q.eq("eventHash", args.eventHash))
-      .unique();
-    if (existing) {
-      await ctx.db.delete("webhookEvents", existing._id);
-    }
-    return null;
-  },
-});
-
-export const applyEvent = internalMutation({
-  args: {
-    type: v.string(),
-    callId: v.string(),
-    assistantId: v.optional(v.string()),
-    agentId: v.optional(v.id("agents")),
-    workspaceId: v.optional(v.id("workspaces")),
-    runtime: v.optional(v.union(v.literal("vapi"), v.literal("cloudflare"))),
-    sessionId: v.optional(v.string()),
-    modelProvider: v.optional(v.string()),
-    modelName: v.optional(v.string()),
-    userId: v.optional(v.string()),
-    status: v.optional(v.string()),
-    endedReason: v.optional(v.string()),
-    transcript: v.optional(v.string()),
-    summary: v.optional(v.string()),
-    recordingUrl: v.optional(v.string()),
-    cost: v.optional(v.number()),
-    startedAt: v.optional(v.number()),
-    endedAt: v.optional(v.number()),
-    turns: v.array(
-      v.object({
-        role: v.union(v.literal("user"), v.literal("assistant")),
-        text: v.string(),
-        at: v.number(),
-      }),
-    ),
-  },
-  handler: async (ctx, args): Promise<null> => {
     const now = Date.now();
-    const incomingStatus =
-      args.status ?? (args.type === "end-of-call-report" ? "ended" : undefined);
     const existing = await ctx.db
       .query("calls")
       .withIndex("by_callId", (q) => q.eq("callId", args.callId))
       .unique();
 
-    const linkedAgent = args.agentId
-      ? await ctx.db.get("agents", args.agentId)
-      : args.assistantId
-        ? await ctx.db
-            .query("agents")
-            .withIndex("by_vapiAssistantId", (q) => q.eq("vapiAssistantId", args.assistantId))
-            .unique()
-        : null;
-
+    let callId = existing?._id;
     if (!existing) {
-      await ctx.db.insert("calls", {
+      callId = await ctx.db.insert("calls", {
         callId: args.callId,
-        userId: args.userId,
-        workspaceId: args.workspaceId ?? linkedAgent?.workspaceId,
-        agentId: args.agentId ?? linkedAgent?._id,
-        assistantId: args.assistantId,
-        runtime: args.runtime,
-        sessionId: args.sessionId,
+        workspaceId: args.workspaceId,
+        agentId: args.agentId,
+        status: "queued",
+        lastSeq: 0,
         modelProvider: args.modelProvider,
         modelName: args.modelName,
-        type: "webCall",
-        status: incomingStatus ?? "unknown",
-        endedReason: args.endedReason,
-        transcript: args.transcript,
-        summary: args.summary,
-        recordingUrl: args.recordingUrl,
-        cost: args.cost,
-        startedAt: args.startedAt,
-        endedAt: args.endedAt ?? (incomingStatus === "ended" ? now : undefined),
         createdAt: now,
         updatedAt: now,
       });
-    } else {
-      const patch: Partial<Doc<"calls">> = { updatedAt: now };
-
-      if (linkedAgent) {
-        patch.workspaceId = existing.workspaceId ?? linkedAgent.workspaceId;
-        patch.agentId = existing.agentId ?? linkedAgent._id;
-      }
-      if (args.agentId && !existing.agentId) {
-        patch.agentId = args.agentId;
-      }
-      if (args.workspaceId && !existing.workspaceId) {
-        patch.workspaceId = args.workspaceId;
-      }
-      if (args.runtime && !existing.runtime) {
-        patch.runtime = args.runtime;
-      }
-      if (args.sessionId && !existing.sessionId) {
-        patch.sessionId = args.sessionId;
-      }
-      if (args.modelProvider && !existing.modelProvider) {
-        patch.modelProvider = args.modelProvider;
-      }
-      if (args.modelName && !existing.modelName) {
-        patch.modelName = args.modelName;
-      }
-
-      // A late, out-of-order status event must never move an ended call back
-      // into an active state.
-      if (incomingStatus && !(existing.status === "ended" && incomingStatus !== "ended")) {
-        patch.status = incomingStatus;
-        if (incomingStatus === "ended") {
-          patch.endedAt = args.endedAt ?? existing.endedAt ?? now;
-        }
-      }
-
-      if (args.userId && !existing.userId) {
-        patch.userId = args.userId;
-      }
-      if (args.assistantId && !existing.assistantId) {
-        patch.assistantId = args.assistantId;
-      }
-      if (args.endedReason) {
-        patch.endedReason = args.endedReason;
-      }
-      if (args.transcript) {
-        patch.transcript = args.transcript;
-      }
-      if (args.summary) {
-        patch.summary = args.summary;
-      }
-      if (args.recordingUrl) {
-        patch.recordingUrl = args.recordingUrl;
-      }
-      if (args.cost !== undefined) {
-        patch.cost = args.cost;
-      }
-      if (args.startedAt !== undefined && existing.startedAt === undefined) {
-        patch.startedAt = args.startedAt;
-      }
-      if (args.endedAt !== undefined) {
-        patch.endedAt = args.endedAt;
-      }
-
-      await ctx.db.patch("calls", existing._id, patch);
     }
 
-    for (const [index, turn] of args.turns.entries()) {
-      const key = `${args.callId}:${index}`;
-      const alreadyStored = await ctx.db
-        .query("callTurns")
-        .withIndex("by_key", (q) => q.eq("key", key))
-        .unique();
-      if (alreadyStored) {
+    const call = existing ?? (await ctx.db.get("calls", callId!));
+    if (!call) {
+      throw new Error("Call row disappeared during ingest");
+    }
+
+    let lastSeq = call.lastSeq ?? 0;
+    let status: string = call.status;
+    const patch: Partial<Doc<"calls">> = { updatedAt: now };
+
+    if (args.workspaceId && !call.workspaceId) {
+      patch.workspaceId = args.workspaceId;
+    }
+    if (args.agentId && !call.agentId) {
+      patch.agentId = args.agentId;
+    }
+    if (args.modelProvider) {
+      patch.modelProvider = args.modelProvider;
+    }
+    if (args.modelName) {
+      patch.modelName = args.modelName;
+    }
+    if (args.transcript) {
+      patch.transcript = args.transcript;
+    }
+    if (args.endedReason) {
+      patch.endedReason = args.endedReason;
+    }
+
+    const events = [...args.events]
+      .sort((left, right) => left.seq - right.seq)
+      .slice(0, MAX_EVENTS_PER_DELIVERY);
+    let applied = 0;
+
+    for (const event of events) {
+      if (event.seq <= lastSeq) {
         continue;
       }
+      lastSeq = event.seq;
+      applied += 1;
+      const at = event.at > 0 ? event.at : now;
 
-      await ctx.db.insert("callTurns", {
-        callId: args.callId,
-        role: turn.role,
-        text: turn.text,
-        at: turn.at > 0 ? turn.at : now + index,
-        key,
-      });
+      switch (event.type) {
+        case "call.started": {
+          const next = nextCallStatus(status, "in-progress");
+          if (next) status = next;
+          if (patch.startedAt === undefined && call.startedAt === undefined) {
+            patch.startedAt = at;
+          }
+          break;
+        }
+        case "call.status": {
+          const next = nextCallStatus(status, event.status ?? "");
+          if (next) status = next;
+          await ctx.db.insert("callEvents", {
+            callId: args.callId,
+            workspaceId: args.workspaceId ?? call.workspaceId,
+            seq: event.seq,
+            kind: event.type,
+            at,
+            reason: event.reason,
+            text: event.text,
+            data: event.data,
+          });
+          break;
+        }
+        case "call.ended": {
+          const next = nextCallStatus(status, "ended");
+          if (next) status = next;
+          patch.endedAt = args.endedAt ?? at;
+          break;
+        }
+        case "call.failed": {
+          const next = nextCallStatus(status, "failed");
+          if (next) status = next;
+          patch.endedAt = args.endedAt ?? at;
+          await ctx.db.insert("callEvents", {
+            callId: args.callId,
+            workspaceId: args.workspaceId ?? call.workspaceId,
+            seq: event.seq,
+            kind: event.type,
+            at,
+            reason: event.reason,
+            text: event.text,
+            data: event.data,
+          });
+          break;
+        }
+        case "turn.appended": {
+          if (!event.role || !event.text) {
+            break;
+          }
+          const key = `${args.callId}:${event.seq}`;
+          const stored = await ctx.db
+            .query("callTurns")
+            .withIndex("by_key", (q) => q.eq("key", key))
+            .unique();
+          if (!stored) {
+            await ctx.db.insert("callTurns", {
+              callId: args.callId,
+              seq: event.seq,
+              role: event.role,
+              text: event.text,
+              at,
+              key,
+            });
+          }
+          break;
+        }
+        default: {
+          await ctx.db.insert("callEvents", {
+            callId: args.callId,
+            workspaceId: args.workspaceId ?? call.workspaceId,
+            seq: event.seq,
+            kind: event.type,
+            at,
+            reason: event.reason,
+            text: event.text,
+            data: event.data,
+          });
+        }
+      }
     }
 
-    return null;
+    if (status !== call.status) {
+      patch.status = status as Doc<"calls">["status"];
+    }
+    patch.lastSeq = lastSeq;
+    await ctx.db.patch("calls", call._id, patch);
+
+    const workspaceId = patch.workspaceId ?? call.workspaceId;
+    if (args.usage && workspaceId) {
+      const usage = await ctx.db
+        .query("callUsage")
+        .withIndex("by_callId", (q) => q.eq("callId", args.callId))
+        .unique();
+      const next = {
+        turns: Math.max(0, Math.round(args.usage.turns ?? 0)),
+        sttAudioMs: Math.max(0, Math.round(args.usage.sttAudioMs ?? 0)),
+        ttsCharacters: Math.max(0, Math.round(args.usage.ttsCharacters ?? 0)),
+        promptTokens: Math.max(0, Math.round(args.usage.promptTokens ?? 0)),
+        completionTokens: Math.max(0, Math.round(args.usage.completionTokens ?? 0)),
+        llmMs: Math.max(0, Math.round(args.usage.llmMs ?? 0)),
+        ttsMs: Math.max(0, Math.round(args.usage.ttsMs ?? 0)),
+        firstAudioMs: Math.max(0, Math.round(args.usage.firstAudioMs ?? 0)),
+      };
+
+      if (usage) {
+        await ctx.db.patch("callUsage", usage._id, next);
+      } else {
+        await ctx.db.insert("callUsage", {
+          callId: args.callId,
+          workspaceId,
+          ...next,
+        });
+      }
+    }
+
+    return { duplicate: false, applied };
   },
 });

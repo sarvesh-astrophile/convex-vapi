@@ -11,7 +11,9 @@
  *
  * `evaluateTranscript` drops the junk before it reaches the model, and
  * `guardReplyStream` removes greeting/duplicate sentences from the model output
- * before it reaches Sarvam TTS.
+ * before it reaches Sarvam TTS. Every drop is reported through `onDrop` so the
+ * runtime can persist it as a `callEvents` row instead of a console line nobody
+ * reads later.
  */
 
 const GREETING_PREFIXES = ["नमस्ते", "नमस्कार", "हाय", "हैलो", "hello", "hi", "hey"];
@@ -43,7 +45,16 @@ export type ReplyGuardOptions = {
   transcript: string;
   /** Assistant messages already spoken in this call, oldest first. */
   spoken: string[];
+  /** Persisted for debugging: why a sentence was removed from the reply. */
+  onDrop?: (rule: DropRule, sentence: string) => void;
+  /**
+   * True when the turn executed at least one tool call. A tool-only turn has no
+   * text, and answering it with "जी, बताइए?" would be actively wrong.
+   */
+  hadToolCalls?: () => boolean;
 };
+
+export type DropRule = "greeting" | "duplicate" | "canned-help" | "self-intro";
 
 export function normalizeForCompare(text: string): string {
   return (
@@ -109,28 +120,39 @@ function isDuplicate(candidate: string, spoken: string[]): boolean {
   return spoken.some((text) => normalizeForCompare(text).includes(value));
 }
 
-function sanitizeSentence(sentence: string, options: ReplyGuardOptions, identityAsked: boolean) {
+type Sanitized = { text: string; rule: DropRule | null };
+
+function sanitizeSentence(
+  sentence: string,
+  options: ReplyGuardOptions,
+  identityAsked: boolean,
+): Sanitized {
   const trimmed = sentence.trim();
-  if (trimmed.length === 0) return "";
+  if (trimmed.length === 0) return { text: "", rule: null };
 
   const withoutGreeting = removeGreeting(trimmed).trim();
-  if (withoutGreeting.length === 0) return "";
+  if (withoutGreeting.length === 0) return { text: "", rule: "greeting" };
 
   // "नमस्ते सर्वेश!" is a greeting plus a vocative: drop the whole sentence.
   if (withoutGreeting !== trimmed) {
     const words = withoutGreeting.split(/\s+/).filter((word) => /[\p{L}\p{N}]/u.test(word));
-    if (words.length < 2) return "";
+    if (words.length < 2) return { text: "", rule: "greeting" };
   }
 
-  if (isDuplicate(withoutGreeting, options.spoken)) return "";
-  if (CANNED_HELP.test(withoutGreeting)) return "";
-  if (!identityAsked && SELF_INTRO.test(withoutGreeting)) return "";
+  if (isDuplicate(withoutGreeting, options.spoken)) return { text: "", rule: "duplicate" };
+  if (CANNED_HELP.test(withoutGreeting)) return { text: "", rule: "canned-help" };
+  if (!identityAsked && SELF_INTRO.test(withoutGreeting)) return { text: "", rule: "self-intro" };
 
-  return withoutGreeting;
+  return { text: withoutGreeting, rule: null };
 }
 
 export function fallbackReply(transcript: string): string {
   return DEVANAGARI.test(transcript) ? "जी, बताइए?" : "Go ahead, please.";
+}
+
+/** Spoken when the model finished with a tool call and produced no text. */
+export function toolAckReply(transcript: string): string {
+  return DEVANAGARI.test(transcript) ? "एक सेकंड, मैं देखता हूँ।" : "One moment, let me check.";
 }
 
 /**
@@ -153,33 +175,44 @@ export async function* guardReplyStream(
       const next = takeSentence(pending);
       if (!next) break;
 
-      const keep = sanitizeSentence(next.sentence, options, identityAsked);
+      const result = sanitizeSentence(next.sentence, options, identityAsked);
       pending = next.rest;
 
-      if (keep.length > 0) {
+      if (result.text.length > 0) {
         spokeSomething = true;
-        yield `${keep} `;
+        yield `${result.text} `;
+      } else if (result.rule) {
+        options.onDrop?.(result.rule, next.sentence.trim());
       }
     }
 
     // Run-on reply without punctuation: stop holding the audio back.
     if (pending.trim().length >= 160) {
-      const keep = sanitizeSentence(pending, options, identityAsked);
+      const result = sanitizeSentence(pending, options, identityAsked);
       pending = "";
-      if (keep.length > 0) {
+      if (result.text.length > 0) {
         spokeSomething = true;
-        yield `${keep} `;
+        yield `${result.text} `;
+      } else if (result.rule) {
+        options.onDrop?.(result.rule, "");
       }
     }
   }
 
   const tail = sanitizeSentence(pending, options, identityAsked);
-  if (tail.length > 0) {
-    yield tail;
+  if (tail.text.length > 0) {
+    yield tail.text;
     return;
+  }
+  if (tail.rule) {
+    options.onDrop?.(tail.rule, "");
   }
 
   if (!spokeSomething) {
+    if (options.hadToolCalls?.()) {
+      yield toolAckReply(options.transcript);
+      return;
+    }
     yield fallbackReply(options.transcript);
   }
 }

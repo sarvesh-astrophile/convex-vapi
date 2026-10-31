@@ -12,10 +12,54 @@ export type FirstMessageMode =
   | "assistant-waits-for-user"
   | "assistant-speaks-first-with-model-generated-message";
 
+/**
+ * A tool the voice agent can call mid-turn. Tools are plain HTTP endpoints,
+ * the same contract Vapi uses for `serverUrl` tools, so a workspace can point
+ * an agent at any service without redeploying the runtime.
+ */
+export const agentToolValidator = v.object({
+  name: v.string(),
+  description: v.string(),
+  /** JSON Schema for the arguments. */
+  parameters: v.optional(v.any()),
+  endpoint: v.string(),
+  /** Sent as `Authorization: Bearer <secret>`. */
+  secret: v.optional(v.string()),
+});
+
+export type AgentTool = {
+  name: string;
+  description: string;
+  parameters?: unknown;
+  endpoint: string;
+  secret?: string;
+};
+
+/** Per-agent endpointing and interruption tuning. */
+export const turnTakingValidator = v.object({
+  /** Silence before Sarvam closes a turn. */
+  endpointingMs: v.optional(v.number()),
+  /** Split utterances sooner on noisy lines at the cost of fragments. */
+  highVadSensitivity: v.optional(v.boolean()),
+  /** Client-side RMS above which playback is interrupted. */
+  interruptThreshold: v.optional(v.number()),
+  /** Consecutive high-RMS chunks required to interrupt. */
+  interruptChunks: v.optional(v.number()),
+});
+
+export type TurnTakingConfig = {
+  endpointingMs?: number;
+  highVadSensitivity?: boolean;
+  interruptThreshold?: number;
+  interruptChunks?: number;
+};
+
 export const agentConfigValidator = v.object({
   firstMessage: v.string(),
   firstMessageMode: v.optional(firstMessageModeValidator),
   systemPrompt: v.string(),
+  tools: v.optional(v.array(agentToolValidator)),
+  turnTaking: v.optional(turnTakingValidator),
   model: v.object({
     provider: v.string(),
     model: v.string(),
@@ -41,6 +85,8 @@ export type AgentConfig = {
   firstMessage: string;
   firstMessageMode?: FirstMessageMode;
   systemPrompt: string;
+  tools?: AgentTool[];
+  turnTaking?: TurnTakingConfig;
   model: {
     provider: string;
     model: string;
@@ -67,6 +113,11 @@ export const DEFAULT_AGENT_CONFIG: AgentConfig = {
   firstMessageMode: "assistant-speaks-first",
   systemPrompt:
     "You are a warm, concise voice assistant. Reply in the caller's language and keep answers short because they are spoken aloud.",
+  tools: [],
+  turnTaking: {
+    endpointingMs: 500,
+    highVadSensitivity: false,
+  },
   model: {
     provider: "sarvam",
     model: "sarvam-105b",
@@ -100,6 +151,26 @@ export const generatedAgentConfigSchema = z.object({
     "assistant-speaks-first-with-model-generated-message",
   ]),
   systemPrompt: z.string().max(12_000),
+  tools: z
+    .array(
+      z.object({
+        name: z.string().min(1).max(64),
+        description: z.string().min(1).max(500),
+        parameters: z.record(z.string(), z.unknown()).optional(),
+        endpoint: z.string().url(),
+        secret: z.string().max(500).optional(),
+      }),
+    )
+    .max(10)
+    .optional(),
+  turnTaking: z
+    .object({
+      endpointingMs: z.number().int().min(100).max(3_000).optional(),
+      highVadSensitivity: z.boolean().optional(),
+      interruptThreshold: z.number().min(0).max(1).optional(),
+      interruptChunks: z.number().int().min(1).max(20).optional(),
+    })
+    .optional(),
   model: z.object({
     provider: z.string().min(1),
     model: z.string().min(1),

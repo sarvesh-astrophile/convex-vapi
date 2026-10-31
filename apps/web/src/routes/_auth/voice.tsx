@@ -15,7 +15,7 @@ import { Loader2, Mic, MicOff, Phone, PhoneOff } from "lucide-react";
 import { ENV } from "@/env.public";
 import { useActiveWorkspace } from "@/hooks/use-active-workspace";
 import { useCloudflareVoice } from "@/hooks/use-cloudflare-voice";
-import { formatCost, formatTimestamp } from "@/lib/format";
+import { formatDuration, formatTimestamp } from "@/lib/format";
 import type { ConnectionState, LiveTurn } from "@/lib/voice-types";
 
 export const Route = createFileRoute("/_auth/voice")({
@@ -150,9 +150,13 @@ function VoicePage() {
               ) : (
                 <Button
                   onClick={() => void call.start()}
-                  disabled={!call.configured || !call.ready}
+                  disabled={!call.configured || call.connection === "connecting"}
                 >
-                  {!call.ready ? <Loader2 className="animate-spin" /> : <Phone />}
+                  {call.connection === "connecting" ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    <Phone />
+                  )}
                   {call.connection === "ended" ? "Start another call" : "Start call"}
                 </Button>
               )}
@@ -168,7 +172,7 @@ function VoicePage() {
             </div>
 
             <p className="text-muted-foreground font-mono text-[11px]">
-              Durable Object: SarvamVoiceAgent/{agentId || "not selected"}
+              Durable Object: SarvamVoiceAgent/{call.callId ?? "no active call"}
             </p>
 
             <p className="text-muted-foreground text-xs">
@@ -240,7 +244,7 @@ function VoicePage() {
                     </div>
                     <div className="text-muted-foreground mt-1 flex items-center justify-between text-xs">
                       <span>{formatTimestamp(recent.createdAt)}</span>
-                      <span>{formatCost(recent.cost)}</span>
+                      <span>{formatDuration(recent.startedAt, recent.endedAt)}</span>
                     </div>
                   </Link>
                 </li>

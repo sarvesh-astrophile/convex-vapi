@@ -1,16 +1,20 @@
 # Cloudflare voice runtime
 
-The voice runtime is a Cloudflare Worker built on `agents/voice`. Each call runs
-in a Durable Object with Sarvam STT/TTS and a per-agent LLM.
+The voice runtime is a Cloudflare Worker built on `agents/voice`. **Each call
+runs in its own Durable Object** (one DO per `${agentId}~${callId}`), with Sarvam
+STT/TTS and a per-agent LLM. Convex is the control plane and the system of
+record.
 
 ```text
 Browser
-  └─ useVoiceAgent (WebSocket, 16 kHz mono PCM)
-       └─ SarvamVoiceAgent (Durable Object)
+  ├─ calls.start (Convex) ──► call row + per-call token
+  └─ useVoiceAgent (WebSocket, 16 kHz mono PCM, ?token=)
+       └─ SarvamVoiceAgent  (Durable Object, one per call)
             ├─ SarvamSttSession  ──► Saaras v4
-            ├─ onTurn()          ──► selected LLM
+            ├─ onTurn()          ──► selected LLM (+ tools)
             ├─ SarvamTtsProvider ──► Bulbul
-            └─ call end          ──► Convex /webhooks/voice
+            └─ event batches     ──► Convex /webhooks/voice (HMAC signed)
+                                      calls · callTurns · callEvents · callUsage
 ```
 
 ## Files
@@ -18,31 +22,62 @@ Browser
 ```text
 apps/voice-runtime/
 ├── src/worker.ts        # Worker entry + agent routing
-├── src/agent.ts         # withVoice agent, onTurn, call sync
+├── src/agent.ts         # withVoice agent: call lifecycle, turns, event stream
 ├── src/guard.ts         # transcript echo filter + reply de-duplication
+├── src/tools.ts         # declarative HTTP tools -> AI SDK tools
 ├── src/models.ts        # provider registry
-├── src/config.ts        # Convex config lookup
-├── src/sync.ts          # call-end sync
+├── src/config.ts        # per-call config lookup
+├── src/sync.ts          # signed event-batch sync
 └── src/env.ts           # runtime types
 
 packages/sarvam/
 ├── src/stt.ts           # streaming STT session
-├── src/tts.ts           # Bulbul adapter
+├── src/tts.ts           # Bulbul adapter (reports synthesis metrics)
 ├── src/languages.ts     # language/mode/model enums
 └── src/audio.ts         # base64, PCM, WAV helpers
 ```
 
-## Configuration flow
+## Call lifecycle
 
-1. The builder saves a new immutable `agentVersions` row in Convex and publishes
-   it with `agents.publish`.
-2. The browser opens `/voice?agent=<id>`.
-3. `useVoiceAgent` connects to
-   `/agents/sarvam-voice-agent/<agent-id>`.
-4. `beforeCallStart()` fetches
-   `GET /voice/config?agentId=<id>` from Convex with `x-voice-secret`.
-5. The Durable Object builds Sarvam STT/TTS clients for that version.
-6. On call end, the DO posts turns and metadata to `POST /webhooks/voice`.
+1. The builder saves a new immutable `agentVersions` row and publishes it with
+   `agents.publish`.
+2. **`calls.start`** (Convex mutation) mints `callId`, a per-call capability
+   token, the `calls` row (`status: "queued"`, `agentVersionId`, `lastSeq: 0`)
+   and a `callSessions` row holding only the token's SHA-256 hash.
+3. The browser connects to `/agents/SarvamVoiceAgent/<agentId>~<callId>` with
+   `?token=<token>`. `useVoiceAgent` passes it via `query`.
+4. `beforeCallStart()` reads `connection.uri`, then fetches
+   `GET /voice/config?callId=&token=` — authenticated by the token, not by a
+   shared runtime secret.
+5. The DO builds Sarvam STT/TTS from that version and creates its own SQLite
+   conversation table. Concurrent calls can never share history.
+6. While the call runs, the DO batches events (`call.started`, `turn.appended`,
+   `transcript.rejected`, `sentence.dropped`, `tool.called`, `tool.result`,
+   `call.ended`) and posts an HMAC-signed batch to `/webhooks/voice` about once a
+   second.
+7. `voiceWebhook.ingest` applies the batch in `seq` order, dedupes by
+   `deliveryId`, and upserts `callUsage`.
+8. A five-minute cron sweeps calls whose runtime disappeared and marks them
+   `failed` with `endedReason: "runtime-lost"`.
+
+## Data model
+
+| Table           | Purpose                                                         |
+| --------------- | --------------------------------------------------------------- |
+| `calls`         | Aggregate root: status, transcript, agent version, `lastSeq`    |
+| `callTurns`     | Ordered turns (`seq`), the source of truth for transcripts      |
+| `callEvents`    | Domain audit: guard drops, tool calls, status, errors           |
+| `callUsage`     | Metering: turns, STT ms, TTS chars, tokens, first-audio latency |
+| `callSessions`  | Per-call capability tokens (hashed)                             |
+| `webhookEvents` | Raw delivery audit for replay; never queried for domain data    |
+
+Invariants enforced in `voiceWebhook.ingest`:
+
+- A delivery is idempotent by `deliveryId`.
+- Events at or below the call's `lastSeq` are skipped, so retries cannot
+  duplicate turns.
+- A terminal call (`ended` / `failed`) never regresses to an active status.
+- Sparse updates never clear richer data.
 
 ## LLM selection
 
@@ -102,6 +137,37 @@ runtime removes the provider `Authorization` header and relies on
 If you use the provider-specific `/openai` endpoint instead, set the model to
 `gpt-4o-mini` and drop the `openai/` prefix.
 
+## Tools
+
+Agents can call tools mid-turn. A tool is a declarative HTTPS endpoint, the same
+contract Vapi uses for server-URL tools:
+
+```ts
+tools: [
+  {
+    name: "check_availability",
+    description: "Check appointment slots for a doctor and date.",
+    parameters: {
+      type: "object",
+      properties: { doctor: { type: "string" }, date: { type: "string" } },
+      required: ["doctor", "date"],
+    },
+    endpoint: "https://api.example.com/voice/check-availability",
+    secret: "optional-bearer-token",
+  },
+];
+```
+
+The runtime POSTs
+`{ callId, agentId, workspaceId, tool, arguments }` with `x-call-id`,
+`x-agent-id`, `x-workspace-id` headers, times out after 10 s, records
+`tool.called` / `tool.result` events, and feeds the JSON result back to the
+model. Endpoints must be `https` (plain `http` only for localhost). Tool loops
+are capped at four model steps.
+
+The reply guard is tool-aware: a turn that ends in a tool call with no text
+speaks a short acknowledgment instead of the "जी, बताइए?" fallback.
+
 ## Environment
 
 `packages/infra-voice/.env`:
@@ -119,11 +185,13 @@ cd packages/backend
 bunx convex env set VOICE_SYNC_SECRET "<value>"
 ```
 
+It is used only to sign event batches (`HMAC-SHA256(timestamp.body)`); it is no
+longer sent to `/voice/config`.
+
 ## Local development
 
 ```bash
-bun run dev:infra:voice   # voice runtime on 3011
-bun run dev:web           # web app on 3001
+bun run dev:all           # web 3001 + Convex + voice runtime 3011
 ```
 
 Point the web app at the local runtime:
@@ -146,27 +214,36 @@ The stack prints the Worker URL. Set `VITE_VOICE_RUNTIME_URL` to that URL in
 
 ## Conversation quality
 
-Repeating greetings have three causes, all handled in the runtime:
+Repeating greetings had four causes, all now handled structurally:
 
-1. **Reconnects replay the greeting.** The browser transport (PartySocket)
-   re-sends `start_call` after every reconnect, which used to re-run
-   `onCallStart` and speak the first message again. The DO now keeps the call id
-   and greets once per call; a `start_call` within 5 minutes of the last
-   activity resumes the running call.
-2. **Cross-call history leaks.** One Durable Object serves every call for an
-   agent, so the conversation table is cleared at call start (unless another
-   connection is active).
-3. **Noise becomes a turn.** Short fragments the transcriber produces from
-   background noise or TTS bleed back ("आप।", "मैं।", "Up.") are dropped in
-   `afterTranscribe()` instead of being answered.
+1. **Cross-call history leaks.** Previously one Durable Object served every call
+   for an agent, so `spoken[]`, `callId` and the SQLite conversation table were
+   shared between callers. Calls are now DO-scoped by `callId`; there is no
+   reset hack and concurrent callers cannot collide.
+2. **Reconnects replay the greeting.** PartySocket re-sends `start_call` after
+   every reconnect. The DO is already configured for that call, so it resumes
+   and greets once (`greeted` flag).
+3. **Noise becomes a turn.** Short fragments from background noise or TTS bleed
+   back ("आप।", "मैं।", "Up.") are dropped in `afterTranscribe()` and recorded as
+   `transcript.rejected` events.
+4. **The model re-emits canned lines.** `guardReplyStream()` strips leading
+   greetings, "how can I help" lines, unprompted self-introductions, and any
+   sentence already spoken in the call. Drops are recorded as
+   `sentence.dropped` events with a rule name, so a repetition bug is a query in
+   `callEvents` instead of a lost console line.
 
-`guardReplyStream()` additionally strips leading greetings, canned
-"how can I help" lines, unprompted self-introductions, and any sentence already
-spoken in the call. If nothing survives it speaks a short "जी, बताइए?" instead of
-restarting the conversation.
-
-Sarvam STT runs without `high_vad_sensitivity` and merges finals within 500 ms so
+Per-agent endpointing lives in `config.turnTaking` (`endpointingMs`,
+`highVadSensitivity`); the defaults stay at 500 ms with VAD sensitivity off so
 one sentence is not split into several turns.
+
+## Observability
+
+- `callUsage.firstAudioMs` is measured from the turn start to the first
+  completed TTS synthesis, so a model or TTS regression shows up without a
+  device test.
+- `callSessions` and `calls.agentVersionId` make it possible to attribute a
+  quality change to a specific publish.
+- `calls.get` returns turns, events and usage for the call detail page.
 
 ## Current limits
 
@@ -174,6 +251,7 @@ one sentence is not split into several turns.
   WebRTC, jitter buffering, or echo cancellation becomes necessary.
 - TTS uses Sarvam's REST endpoint. Switching to Sarvam streaming TTS is the next
   latency improvement.
-- Telephony is not wired yet. Twilio/Plivo adapters are the planned Phase 3
-  work.
+- Telephony is not wired yet. `calls.phoneNumber` / `customerNumber` are reserved
+  for the Twilio/Plivo adapters.
+- `tools` has no builder UI yet; it is set through the config/copilot payload.
 - `agents/voice` is Beta. Pin the `agents` package version.

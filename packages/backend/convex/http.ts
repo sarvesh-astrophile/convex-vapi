@@ -4,55 +4,30 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { httpAction } from "./_generated/server";
 import { authComponent, createAuth } from "./auth";
+import { hmacSha256Hex, timingSafeEqual } from "./lib/crypto";
 
 const http = httpRouter();
 
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) {
-    return false;
-  }
-  let difference = 0;
-  for (let index = 0; index < a.length; index += 1) {
-    difference |= a.charCodeAt(index) ^ b.charCodeAt(index);
-  }
-  return difference === 0;
-}
-
-async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
+const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 http.route({
   path: "/voice/config",
   method: "GET",
   handler: httpAction(async (ctx, request) => {
-    const secret = process.env.VOICE_SYNC_SECRET;
-    if (!secret) {
-      console.error("VOICE_SYNC_SECRET is not configured on the Convex deployment");
-      return new Response("Voice sync secret is not configured", { status: 500 });
-    }
-
-    const provided = request.headers.get("x-voice-secret") ?? "";
-    if (!timingSafeEqual(provided, secret)) {
-      return new Response("Unauthorized", { status: 401 });
-    }
-
-    const agentId = new URL(request.url).searchParams.get("agentId");
-    if (!agentId) {
-      return new Response("Missing agentId", { status: 400 });
+    const url = new URL(request.url);
+    const callId = url.searchParams.get("callId") ?? "";
+    const token = request.headers.get("x-voice-token") ?? url.searchParams.get("token") ?? "";
+    if (callId.length === 0 || token.length === 0) {
+      return new Response("Missing callId or token", { status: 400 });
     }
 
     try {
-      const config = await ctx.runQuery(internal.voice.getPublishedConfig, {
-        agentId: agentId as Id<"agents">,
-      });
+      const config = await ctx.runMutation(internal.voice.consumeCallToken, { callId, token });
       return Response.json(config);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Config lookup failed";
-      return new Response(message, { status: 404 });
+      const status = message.toLowerCase().includes("not found") ? 404 : 401;
+      return new Response(message, { status });
     }
   }),
 });
@@ -67,11 +42,19 @@ http.route({
       return new Response("Voice sync secret is not configured", { status: 500 });
     }
 
-    if (!timingSafeEqual(request.headers.get("x-voice-secret") ?? "", secret)) {
+    const rawBody = await request.text();
+    const timestamp = request.headers.get("x-voice-timestamp") ?? "";
+    const signature = request.headers.get("x-voice-signature") ?? "";
+    const sentAt = Number(timestamp);
+    if (!Number.isFinite(sentAt) || Math.abs(Date.now() - sentAt) > MAX_CLOCK_SKEW_MS) {
+      return new Response("Stale or missing timestamp", { status: 401 });
+    }
+
+    const expected = await hmacSha256Hex(secret, `${timestamp}.${rawBody}`);
+    if (!timingSafeEqual(signature, expected)) {
       return new Response("Unauthorized", { status: 401 });
     }
 
-    const rawBody = await request.text();
     let parsed: unknown;
     try {
       parsed = JSON.parse(rawBody);
@@ -83,49 +66,34 @@ http.route({
       return new Response("Invalid voice payload", { status: 400 });
     }
 
+    const deliveryId = stringField(parsed, "deliveryId");
     const callId = stringField(parsed, "callId");
     const agentId = stringField(parsed, "agentId");
     const workspaceId = stringField(parsed, "workspaceId");
-    const turns = parseVoiceTurns(parsed.turns);
+    const events = parseEvents(parsed.events);
 
-    if (!callId || !agentId || !workspaceId || !turns) {
+    if (!deliveryId || !callId || !events) {
       return new Response("Invalid voice payload", { status: 400 });
     }
 
-    const eventHash = await sha256Hex(rawBody);
-    const payloadForAudit = rawBody.length > 500_000 ? rawBody.slice(0, 500_000) : rawBody;
-    const event = await ctx.runMutation(internal.voiceWebhook.recordEvent, {
-      eventHash,
-      eventType: "cloudflare-end-of-call",
-      callId,
-      payload: payloadForAudit,
-    });
-
-    if (event.duplicate) {
-      return new Response("Duplicate delivery ignored", { status: 200 });
-    }
-
     try {
-      await ctx.runMutation(internal.voiceWebhook.applyEvent, {
-        type: "end-of-call-report",
+      await ctx.runMutation(internal.voiceWebhook.ingest, {
+        deliveryId,
+        payload: rawBody,
         callId,
-        agentId: agentId as Id<"agents">,
-        workspaceId: workspaceId as Id<"workspaces">,
-        runtime: "cloudflare",
-        sessionId: callId,
+        agentId: agentId ? (agentId as Id<"agents">) : undefined,
+        workspaceId: workspaceId ? (workspaceId as Id<"workspaces">) : undefined,
         modelProvider: stringField(parsed, "modelProvider") ?? undefined,
         modelName: stringField(parsed, "modelName") ?? undefined,
-        status: "ended",
-        endedReason: stringField(parsed, "endedReason") ?? "call-ended",
+        endedReason: stringField(parsed, "endedReason") ?? undefined,
         transcript: stringField(parsed, "transcript") ?? undefined,
-        startedAt: numberField(parsed, "startedAt"),
         endedAt: numberField(parsed, "endedAt"),
-        turns,
+        events,
+        usage: parseUsage(parsed.usage),
       });
     } catch (error) {
-      await ctx.runMutation(internal.voiceWebhook.forgetEvent, { eventHash });
-      console.error("Failed to apply Cloudflare voice call", error);
-      return new Response("Failed to apply voice call", { status: 500 });
+      console.error("Failed to ingest voice events", error);
+      return new Response("Failed to apply voice events", { status: 500 });
     }
 
     return new Response("ok", { status: 200 });
@@ -150,20 +118,68 @@ function numberField(value: Record<string, unknown>, key: string): number | unde
   return typeof field === "number" && Number.isFinite(field) ? field : undefined;
 }
 
-function parseVoiceTurns(
-  value: unknown,
-): Array<{ role: "user" | "assistant"; text: string; at: number }> | null {
+type IngestEvent = {
+  eventId: string;
+  seq: number;
+  type: string;
+  at: number;
+  role?: "user" | "assistant";
+  text?: string;
+  status?: string;
+  reason?: string;
+  data?: string;
+};
+
+function parseEvents(value: unknown): IngestEvent[] | null {
   if (!Array.isArray(value)) return null;
 
-  const turns: Array<{ role: "user" | "assistant"; text: string; at: number }> = [];
+  const events: IngestEvent[] = [];
   for (const item of value) {
     if (!isRecord(item)) return null;
-    const role = item.role === "user" || item.role === "assistant" ? item.role : null;
-    const text = typeof item.text === "string" ? item.text : null;
-    const at = typeof item.at === "number" && Number.isFinite(item.at) ? item.at : 0;
-    if (!role || text === null) return null;
-    turns.push({ role, text, at });
+    const eventId = stringField(item, "eventId");
+    const type = stringField(item, "type");
+    const seq = numberField(item, "seq");
+    const at = numberField(item, "at") ?? 0;
+    if (!eventId || !type || seq === undefined) return null;
+
+    const role = item.role === "user" || item.role === "assistant" ? item.role : undefined;
+    events.push({
+      eventId,
+      seq,
+      type,
+      at,
+      ...(role ? { role } : {}),
+      ...(stringField(item, "text") ? { text: stringField(item, "text")! } : {}),
+      ...(stringField(item, "status") ? { status: stringField(item, "status")! } : {}),
+      ...(stringField(item, "reason") ? { reason: stringField(item, "reason")! } : {}),
+      ...(stringField(item, "data") ? { data: stringField(item, "data")! } : {}),
+    });
   }
 
-  return turns.slice(0, 2_000);
+  return events.slice(0, 200);
+}
+
+function parseUsage(value: unknown):
+  | {
+      turns?: number;
+      sttAudioMs?: number;
+      ttsCharacters?: number;
+      promptTokens?: number;
+      completionTokens?: number;
+      llmMs?: number;
+      ttsMs?: number;
+      firstAudioMs?: number;
+    }
+  | undefined {
+  if (!isRecord(value)) return undefined;
+  return {
+    turns: numberField(value, "turns"),
+    sttAudioMs: numberField(value, "sttAudioMs"),
+    ttsCharacters: numberField(value, "ttsCharacters"),
+    promptTokens: numberField(value, "promptTokens"),
+    completionTokens: numberField(value, "completionTokens"),
+    llmMs: numberField(value, "llmMs"),
+    ttsMs: numberField(value, "ttsMs"),
+    firstAudioMs: numberField(value, "firstAudioMs"),
+  };
 }

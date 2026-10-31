@@ -12,7 +12,7 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { Loader2, Phone } from "lucide-react";
 
 import { useActiveWorkspace } from "@/hooks/use-active-workspace";
-import { formatCost, formatDuration, formatTimestamp } from "@/lib/format";
+import { formatDuration, formatTimestamp } from "@/lib/format";
 
 export const Route = createFileRoute("/_auth/calls/")({
   component: CallsPage,
@@ -74,7 +74,6 @@ function CallsPage() {
                       </p>
                     </div>
                     <div className="text-muted-foreground flex items-center gap-3 text-xs sm:justify-end">
-                      <span>{formatCost(call.cost)}</span>
                       <span className="rounded-full border px-2 py-0.5">{call.status}</span>
                     </div>
                   </Link>

@@ -226,6 +226,7 @@ Requirements:
 - The firstMessage must sound natural when spoken.
 - If the brief asks for multiple languages, use transcriber mode 'codemix' or 'translit' and make the systemPrompt explicitly handle both languages.
 - Keep the systemPrompt focused and under 400 words.
+- Only add tools when the brief needs one. Each tool needs a snake_case name, a one-line description, JSON Schema parameters, and an https endpoint. Leave tools empty otherwise.
 - The name and description must be short and human-readable.
 ${context}
 

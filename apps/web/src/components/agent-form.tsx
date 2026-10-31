@@ -348,14 +348,16 @@ export function AgentForm({
       });
       setName(generated.name);
       setDescription(generated.description);
-      setConfig({
+      setConfig((current) => ({
         firstMessage: generated.firstMessage,
         firstMessageMode: generated.firstMessageMode,
         systemPrompt: generated.systemPrompt,
         model: generated.model,
         voice: generated.voice,
         transcriber: generated.transcriber,
-      });
+        tools: generated.tools ?? current.tools ?? [],
+        turnTaking: generated.turnTaking ?? current.turnTaking,
+      }));
       setCopilotAnswer(
         `Generated a full configuration for "${generated.name}". Review the prompt and publish when ready.`,
       );

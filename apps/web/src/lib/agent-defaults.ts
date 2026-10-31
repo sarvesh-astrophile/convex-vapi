@@ -5,6 +5,11 @@ export const DEFAULT_AGENT_CONFIG: AgentConfig = {
   firstMessageMode: "assistant-speaks-first",
   systemPrompt:
     "You are a warm, concise voice assistant. Reply in the caller's language and keep answers short because they are spoken aloud.",
+  tools: [],
+  turnTaking: {
+    endpointingMs: 500,
+    highVadSensitivity: false,
+  },
   model: {
     provider: "sarvam",
     model: "sarvam-105b",

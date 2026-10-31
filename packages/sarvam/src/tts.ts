@@ -11,6 +11,8 @@ export type SarvamTtsOptions = {
   model?: SarvamTtsModel;
   /** Voice-agent PCM rate. Sarvam supports 8k through 48k. */
   sampleRate?: 8_000 | 16_000 | 22_050 | 24_000;
+  /** Instrumentation hook used to persist TTS latency and character usage. */
+  onSynthesize?: (durationMs: number, characters: number) => void;
 };
 
 /**
@@ -28,6 +30,7 @@ export class SarvamTtsProvider {
       throw new Error(`Sarvam TTS text exceeds ${MAX_TTS_CHARACTERS} characters`);
     }
 
+    const startedAt = Date.now();
     const sampleRate = this.options.sampleRate ?? 16_000;
     const response = await fetch(SARVAM_TTS_URL, {
       method: "POST",
@@ -61,7 +64,9 @@ export class SarvamTtsProvider {
       throw new Error("Sarvam TTS returned no audio");
     }
 
-    return toArrayBuffer(wavToPcm(fromBase64(base64)));
+    const audio = toArrayBuffer(wavToPcm(fromBase64(base64)));
+    this.options.onSynthesize?.(Date.now() - startedAt, trimmed.length);
+    return audio;
   }
 
   async *synthesizeStream(text: string, signal?: AbortSignal): AsyncGenerator<ArrayBuffer> {

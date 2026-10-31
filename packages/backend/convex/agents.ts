@@ -18,6 +18,71 @@ function normalizeName(name: string): string {
   return trimmed;
 }
 
+function normalizeEndpoint(endpoint: string): string {
+  let url: URL;
+  try {
+    url = new URL(endpoint.trim());
+  } catch {
+    throw new Error(`Tool endpoint is not a valid URL: ${endpoint}`);
+  }
+  const isLocal = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && isLocal)) {
+    throw new Error("Tool endpoints must use https (http is only allowed for localhost)");
+  }
+  return url.toString();
+}
+
+function normalizeTools(tools: AgentConfig["tools"]): AgentConfig["tools"] {
+  if (!tools || tools.length === 0) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  return tools.slice(0, 10).map((tool) => {
+    const name = tool.name.trim();
+    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(name)) {
+      throw new Error(`Invalid tool name "${tool.name}". Use letters, numbers, _ or -.`);
+    }
+    if (seen.has(name)) {
+      throw new Error(`Duplicate tool name "${name}"`);
+    }
+    seen.add(name);
+
+    const description = tool.description.trim();
+    if (description.length === 0) {
+      throw new Error(`Tool "${name}" needs a description`);
+    }
+
+    return {
+      name,
+      description: description.slice(0, 500),
+      ...(tool.parameters !== undefined ? { parameters: tool.parameters } : {}),
+      endpoint: normalizeEndpoint(tool.endpoint),
+      ...(tool.secret ? { secret: tool.secret } : {}),
+    };
+  });
+}
+
+function normalizeTurnTaking(turnTaking: AgentConfig["turnTaking"]): AgentConfig["turnTaking"] {
+  if (!turnTaking) {
+    return {
+      endpointingMs: 500,
+      highVadSensitivity: false,
+    };
+  }
+
+  return {
+    endpointingMs: Math.min(Math.max(Math.round(turnTaking.endpointingMs ?? 500), 100), 3_000),
+    highVadSensitivity: turnTaking.highVadSensitivity ?? false,
+    ...(turnTaking.interruptThreshold !== undefined
+      ? { interruptThreshold: Math.min(Math.max(turnTaking.interruptThreshold, 0), 1) }
+      : {}),
+    ...(turnTaking.interruptChunks !== undefined
+      ? { interruptChunks: Math.min(Math.max(Math.round(turnTaking.interruptChunks), 1), 20) }
+      : {}),
+  };
+}
+
 function normalizeConfig(config: AgentConfig): AgentConfig {
   const model = {
     provider: config.model.provider.trim(),
@@ -58,6 +123,8 @@ function normalizeConfig(config: AgentConfig): AgentConfig {
     firstMessage: config.firstMessage.trim(),
     firstMessageMode: config.firstMessageMode ?? "assistant-speaks-first",
     systemPrompt: config.systemPrompt.trim(),
+    tools: normalizeTools(config.tools),
+    turnTaking: normalizeTurnTaking(config.turnTaking),
     model,
     voice,
     transcriber,
@@ -269,7 +336,7 @@ export const markPublished = internalMutation({
 
 export const publish = action({
   args: { agentId: v.id("agents") },
-  handler: async (ctx, args): Promise<{ runtime: "cloudflare"; vapiAssistantId: null }> => {
+  handler: async (ctx, args): Promise<{ runtime: "cloudflare" }> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
       throw new Error("Unauthenticated");
@@ -290,6 +357,6 @@ export const publish = action({
       versionId: data.versionId,
     });
 
-    return { runtime: "cloudflare", vapiAssistantId: null };
+    return { runtime: "cloudflare" };
   },
 });

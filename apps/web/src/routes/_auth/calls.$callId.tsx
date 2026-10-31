@@ -9,9 +9,9 @@ import {
 } from "@convex-vapi/ui/components/card";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useConvexAuth, useQuery } from "convex/react";
-import { ArrowLeft, ExternalLink, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 
-import { formatCost, formatDuration, formatTimestamp } from "@/lib/format";
+import { formatDuration, formatTimestamp } from "@/lib/format";
 
 export const Route = createFileRoute("/_auth/calls/$callId")({
   component: CallDetailPage,
@@ -56,7 +56,7 @@ function CallDetailPage() {
     );
   }
 
-  const { call, turns } = result;
+  const { call, turns, events, usage } = result;
 
   return (
     <div className="container mx-auto grid max-w-4xl gap-6 px-4 py-6">
@@ -84,31 +84,59 @@ function CallDetailPage() {
             <Field label="Started" value={formatTimestamp(call.startedAt)} />
             <Field label="Ended" value={formatTimestamp(call.endedAt)} />
             <Field label="Duration" value={formatDuration(call.startedAt, call.endedAt)} />
-            <Field label="Cost" value={formatCost(call.cost)} />
+            <Field label="Turns" value={String(usage?.turns ?? turns.length)} />
+            <Field label="First audio" value={usage ? `${usage.firstAudioMs} ms` : "—"} />
+            <Field label="Prompt tokens" value={usage ? String(usage.promptTokens) : "—"} />
             <Field label="Ended reason" value={call.endedReason ?? "—"} />
-            <Field label="Assistant" value={call.assistantId ?? "—"} />
+            <Field label="Agent" value={call.agentId ?? "—"} />
           </div>
-
-          {call.recordingUrl ? (
-            <a
-              href={call.recordingUrl}
-              target="_blank"
-              rel="noreferrer"
-              className={buttonVariants({ variant: "outline", size: "sm", className: "w-fit" })}
-            >
-              <ExternalLink /> Open recording
-            </a>
-          ) : null}
         </CardContent>
       </Card>
+
+      {events.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Runtime events</CardTitle>
+            <CardDescription>
+              Guard rejections and tool calls recorded while this call ran.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y">
+              {events
+                .filter((event) =>
+                  [
+                    "transcript.rejected",
+                    "sentence.dropped",
+                    "tool.called",
+                    "tool.result",
+                    "error",
+                  ].includes(event.kind),
+                )
+                .slice(-20)
+                .map((event) => (
+                  <li key={event._id} className="grid gap-0.5 py-2 text-xs">
+                    <span className="font-mono text-[11px]">
+                      {event.kind}
+                      {event.reason ? ` · ${event.reason}` : ""}
+                    </span>
+                    {event.text ? (
+                      <span className="text-muted-foreground truncate">{event.text}</span>
+                    ) : null}
+                  </li>
+                ))}
+            </ul>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>
           <CardTitle>Transcript</CardTitle>
           <CardDescription>
             {turns.length > 0
-              ? `${turns.length} turns saved from the end-of-call report.`
-              : "No structured turns yet. The voice runtime syncs the transcript when the call ends."}
+              ? `${turns.length} turns streamed live while the call ran.`
+              : "No turns yet. The runtime streams each turn as it happens."}
           </CardDescription>
         </CardHeader>
         <CardContent>

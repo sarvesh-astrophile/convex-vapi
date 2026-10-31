@@ -7,13 +7,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ENV } from "@/env.public";
 import type { ConnectionState, LiveTurn } from "@/lib/voice-types";
 
-type VoiceMeta = {
-  type?: unknown;
-  callId?: unknown;
-  agentId?: unknown;
-  workspaceId?: unknown;
-};
-
 export type CloudflareVoiceOptions = {
   agentId: string;
   workspaceId?: Id<"workspaces">;
@@ -29,82 +22,114 @@ function runtimeHost(): string {
   }
 }
 
+type CallSession = {
+  callId: string;
+  token: string;
+};
+
 /**
- * Cloudflare `agents/voice` transport. The Durable Object sends
- * `voice_call_meta` once the call starts; we claim that call in Convex and
- * sync the transcript when the call ends.
+ * Cloudflare `agents/voice` transport.
+ *
+ * A call is minted in Convex first (`calls.start`), which creates the call row
+ * and a per-call capability token. The Durable Object name is
+ * `${agentId}~${callId}`, so every call gets its own DO and its own history —
+ * no shared state between concurrent callers. The token travels in the
+ * WebSocket query string and is the only way the runtime can read the config.
  */
 export function useCloudflareVoice({ agentId, workspaceId, enabled }: CloudflareVoiceOptions) {
   const host = runtimeHost();
   const configured = enabled && agentId.length > 0 && host.length > 0;
 
+  const [session, setSession] = useState<CallSession | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [ended, setEnded] = useState(false);
+
+  const wantStartRef = useRef(false);
+  const wasLiveRef = useRef(false);
+
+  const mintCall = useMutation(api.calls.start);
+
   const voice = useVoiceAgent({
     agent: "SarvamVoiceAgent",
-    name: agentId || "default",
+    name: session ? `${agentId}~${session.callId}` : agentId || "default",
     host,
-    enabled: configured,
+    enabled: configured && session !== null,
+    query: session ? { token: session.token } : undefined,
     preferredFormat: "pcm16",
   });
-
-  const register = useMutation(api.calls.register);
-  const markEnded = useMutation(api.calls.markEnded);
-  const [callId, setCallId] = useState<string | null>(null);
-  const [localError, setLocalError] = useState<string | null>(null);
-  const handledCallRef = useRef<string | null>(null);
-  const wasLiveRef = useRef(false);
-  const [started, setStarted] = useState(false);
-  const [ended, setEnded] = useState(false);
 
   const isLive =
     voice.status === "listening" || voice.status === "thinking" || voice.status === "speaking";
 
+  // `voice.startCall` is recreated on every render; refs keep the effects from
+  // re-running (and re-starting calls) on unrelated state changes.
+  const startCallRef = useRef(voice.startCall);
+  startCallRef.current = voice.startCall;
+  const endCallRef = useRef(voice.endCall);
+  endCallRef.current = voice.endCall;
+
   useEffect(() => {
-    const meta = voice.lastCustomMessage as VoiceMeta | null;
-    if (!meta || meta.type !== "voice_call_meta" || typeof meta.callId !== "string") {
+    if (!session || !wantStartRef.current || !voice.connected) {
       return;
     }
-    if (handledCallRef.current === meta.callId) return;
-    handledCallRef.current = meta.callId;
-    setCallId(meta.callId);
+    wantStartRef.current = false;
+    void startCallRef
+      .current()
+      .catch((error: unknown) => {
+        setLocalError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        setStarting(false);
+      });
+  }, [session, voice.connected]);
 
-    void register({
-      callId: meta.callId,
-      runtime: "cloudflare",
-      agentId: agentId as Id<"agents">,
-      workspaceId,
-    }).catch((error: unknown) => {
-      setLocalError(error instanceof Error ? error.message : String(error));
-    });
-  }, [agentId, register, voice.lastCustomMessage, workspaceId]);
+  useEffect(() => {
+    if (!wantStartRef.current || !voice.error) {
+      return;
+    }
+    wantStartRef.current = false;
+    setStarting(false);
+    setLocalError(voice.error);
+  }, [voice.error]);
 
   useEffect(() => {
     if (isLive) {
       wasLiveRef.current = true;
       return;
     }
-    if (!wasLiveRef.current || !handledCallRef.current) return;
+    if (!wasLiveRef.current) {
+      return;
+    }
     wasLiveRef.current = false;
     setEnded(true);
-    void markEnded({ callId: handledCallRef.current }).catch(() => {
-      // The call sync will reconcile the final state.
-    });
-  }, [isLive, markEnded]);
+  }, [isLive]);
 
   const start = useCallback(async () => {
     setLocalError(null);
     setEnded(false);
-    setStarted(true);
-    await voice.startCall();
-  }, [voice]);
+    setStarting(true);
+    wantStartRef.current = true;
+
+    try {
+      const minted = await mintCall({
+        agentId: agentId as Id<"agents">,
+        workspaceId,
+      });
+      setSession({ callId: minted.callId, token: minted.token });
+    } catch (error) {
+      wantStartRef.current = false;
+      setStarting(false);
+      setLocalError(error instanceof Error ? error.message : String(error));
+    }
+  }, [agentId, mintCall, workspaceId]);
 
   const stop = useCallback(() => {
-    voice.endCall();
-    setStarted(false);
+    wantStartRef.current = false;
+    endCallRef.current();
+    setStarting(false);
     setEnded(true);
-    if (handledCallRef.current) {
-      void markEnded({ callId: handledCallRef.current }).catch(() => {});
-    }
-  }, [markEnded, voice]);
+  }, []);
 
   const connection: ConnectionState =
     localError || voice.error
@@ -113,7 +138,7 @@ export function useCloudflareVoice({ agentId, workspaceId, enabled }: Cloudflare
         ? "active"
         : ended
           ? "ended"
-          : started
+          : starting || (session !== null && !voice.connected)
             ? "connecting"
             : "idle";
 
@@ -129,13 +154,12 @@ export function useCloudflareVoice({ agentId, workspaceId, enabled }: Cloudflare
 
   return {
     configured,
-    ready: voice.connected,
     connection,
     muted: voice.isMuted,
     error: localError ?? voice.error,
     turns,
     partial,
-    callId,
+    callId: session?.callId ?? null,
     isLive,
     start,
     stop,
