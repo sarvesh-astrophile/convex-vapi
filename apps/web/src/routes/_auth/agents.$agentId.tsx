@@ -9,7 +9,7 @@ import {
   CardTitle,
 } from "@convex-vapi/ui/components/card";
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "convex/react";
+import { useConvexAuth, useQuery } from "convex/react";
 import { ArrowLeft, Loader2 } from "lucide-react";
 
 import { AgentForm } from "@/components/agent-form";
@@ -24,7 +24,11 @@ export const Route = createFileRoute("/_auth/agents/$agentId")({
 function AgentDetailPage() {
   const { agentId } = Route.useParams();
   const { workspace, isLoading } = useActiveWorkspace();
-  const result = useQuery(api.agents.get, { agentId: agentId as Id<"agents"> });
+  const { isAuthenticated } = useConvexAuth();
+  const result = useQuery(
+    api.agents.get,
+    isAuthenticated ? { agentId: agentId as Id<"agents"> } : "skip",
+  );
 
   if (isLoading || !workspace || result === undefined) {
     return (

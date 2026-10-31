@@ -38,6 +38,9 @@ export default Alchemy.Stack(
       },
       dev: {
         port: 3011,
+        // Silently drifting to 3012 leaves VITE_VOICE_RUNTIME_URL pointing at
+        // a dead port, so fail loudly instead.
+        strictPort: true,
       },
     });
 
