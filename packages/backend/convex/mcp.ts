@@ -1,9 +1,7 @@
-import { McpServer, tool, type McpUser, type ToolCtx } from "@convex-dev/mcp";
-import type { HttpRouter } from "convex/server";
+import { McpServer, tool } from "@convex-dev/mcp";
 import { v } from "convex/values";
 
 import { components, internal } from "./_generated/api";
-import { httpAction } from "./_generated/server";
 import {
   dailyEarningsValidator,
   demandOpportunityValidator,
@@ -13,44 +11,26 @@ import {
 } from "./lib/autoDriver";
 
 const READ_SCOPE = "auto:read";
-export const PUBLIC_MCP_PATH = "/mcp/auto";
 
 /**
- * Public MCP server: the component's OAuth layer is bypassed, so no bearer
- * token, consent page, or API key is required. The data is shared demo data,
- * not user-owned.
+ * Read-only MCP surface over the bundled Auto driver demo data.
+ *
+ * The data is not user-owned: every signed-in user with an `auto:read`
+ * connection sees the same AUTO1001 export. No tool takes a user ID.
  */
-class PublicMcpServer extends McpServer {
-  override async authenticate(_ctx: ToolCtx, _request: Request): Promise<McpUser | null> {
-    return {
-      userId: "public",
-      scopes: Object.keys(this.options.scopes ?? {}),
-      connectionId: "public",
-    };
-  }
-
-  /** Strip Origin so any browser-based MCP client can call the public endpoint. */
-  override async handleMcp(ctx: ToolCtx, request: Request): Promise<Response> {
-    const body = await request.text();
-    const headers = new Headers(request.headers);
-    headers.delete("Origin");
-    return await super.handleMcp(ctx, new Request(request.url, { method: "POST", headers, body }));
-  }
-}
-
-export const mcp: McpServer = new PublicMcpServer(components.mcp, {
+export const mcp: McpServer = new McpServer(components.mcp, {
   name: "auto-driver",
   title: "Auto Driver Data",
   version: "1.0.0",
-  path: PUBLIC_MCP_PATH,
+  path: "/mcp/auto",
   instructions:
     "Read-only access to the AUTO1001 Auto driver demo export for Bengaluru, 2026-10-26 to 2026-10-31. " +
     "Fares are Indian rupees (INR). Use get_earnings_summary for a headline, list_trips to inspect individual rides, " +
     "get_daily_earnings for per-day totals, and list_demand_opportunities for suggested demand windows. " +
     "Opportunity rows are illustrative and unverified; never present them as confirmed live demand. " +
     "Dates are ISO 8601 (YYYY-MM-DD).",
-  // Unused: this server has no OAuth flow. The option is required by the type.
-  consentUrl: `${process.env.SITE_URL ?? "http://localhost:3001"}/`,
+  consentUrl:
+    process.env.MCP_CONSENT_URL ?? `${process.env.SITE_URL ?? "http://localhost:3001"}/connect`,
   scopes: {
     [READ_SCOPE]: "Read AUTO1001's trips, earnings, and demand opportunities",
   },
@@ -135,81 +115,17 @@ export const mcp: McpServer = new PublicMcpServer(components.mcp, {
   },
 });
 
-/**
- * Registers the public MCP endpoint. These are the only MCP routes: no
- * OAuth, authorization, token, or well-known discovery routes are exposed.
- */
-export function registerPublicMcpRoutes(http: HttpRouter) {
-  http.route({
-    path: PUBLIC_MCP_PATH,
-    method: "POST",
-    handler: httpAction(async (ctx, request) => {
-      const response = await mcp.handleMcp(ctx as unknown as ToolCtx, request);
-      return withCors(response);
-    }),
-  });
+export const {
+  getAuthRequest,
+  authorize,
+  listConnections,
+  revokeConnection,
+  createApiKey,
+  findAuthRequest,
+} = mcp.api({
+  // With Convex Better Auth, `subject` is the Better Auth user id.
+  getUserId: async (ctx) => (await ctx.auth.getUserIdentity())?.subject ?? null,
+});
 
-  http.route({
-    path: PUBLIC_MCP_PATH,
-    method: "GET",
-    handler: httpAction(async () => {
-      return new Response(publicGuide(), {
-        status: 200,
-        headers: {
-          "Content-Type": "text/plain; charset=utf-8",
-          "Access-Control-Allow-Origin": "*",
-        },
-      });
-    }),
-  });
-
-  http.route({
-    path: PUBLIC_MCP_PATH,
-    method: "OPTIONS",
-    handler: httpAction(async () => {
-      return new Response(null, { status: 204, headers: corsHeaders() });
-    }),
-  });
-}
-
-function publicGuide(): string {
-  const tools = Object.entries(mcp.options.tools)
-    .map(([name, definition]) => `- ${name}: ${definition.description}`)
-    .join("\n");
-
-  return [
-    "# Auto Driver Data",
-    "",
-    mcp.options.instructions ?? "",
-    "",
-    "This MCP server is public. No authentication, sign-in, or API key is required.",
-    "",
-    `MCP endpoint (JSON-RPC over HTTP POST): ${mcp.siteUrl}${PUBLIC_MCP_PATH}`,
-    "",
-    "Tools:",
-    tools,
-    "",
-  ].join("\n");
-}
-
-function corsHeaders(): Record<string, string> {
-  return {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-    "Access-Control-Allow-Headers":
-      "Authorization, Content-Type, Accept, MCP-Protocol-Version, Mcp-Session-Id, Last-Event-ID",
-    "Access-Control-Expose-Headers": "WWW-Authenticate, Mcp-Session-Id",
-  };
-}
-
-function withCors(response: Response): Response {
-  const headers = new Headers(response.headers);
-  for (const [key, value] of Object.entries(corsHeaders())) {
-    headers.set(key, value);
-  }
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
-}
+/** Operator/CLI helper; only callable with deploy credentials. */
+export const { createApiKeyForUser } = mcp.internalApi();

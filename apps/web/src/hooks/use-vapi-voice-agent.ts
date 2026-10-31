@@ -64,6 +64,8 @@ function errorMessage(error: unknown): string {
   return "The voice call failed. Check microphone permissions and try again.";
 }
 
+export type VapiVoiceAgent = ReturnType<typeof useVapiVoiceAgent>;
+
 /**
  * Owns one Vapi Web SDK client for an on-screen browser voice agent. Audio
  * travels over Vapi's WebRTC transport; no Convex call record is required for
