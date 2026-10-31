@@ -1,6 +1,8 @@
 import { cn } from "@convex-vapi/ui/lib/utils";
-import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { ChevronLeft, ChevronRight, Pause, Phone, Play } from "lucide-react";
+import { Fragment, useCallback, useEffect, useState } from "react";
+
+import { VegetableCall } from "@/components/vegetable-call";
 
 const SLIDES = [
   {
@@ -31,22 +33,46 @@ const SLIDES = [
 ] as const;
 
 const SLIDE_DURATION_MS = 5000;
+/** Zero-based index of the slide that ends with the live location-advisor demo. */
+const CALL_SLIDE_INDEX = 3;
 
 export default function VegetableSlideshow() {
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [progress, setProgress] = useState(0);
+  const [callOpen, setCallOpen] = useState(false);
 
   const goTo = useCallback((next: number) => {
+    setCallOpen(false);
     setIndex(((next % SLIDES.length) + SLIDES.length) % SLIDES.length);
     setProgress(0);
   }, []);
 
-  const next = useCallback(() => goTo(index + 1), [goTo, index]);
+  const openCall = useCallback(() => {
+    setCallOpen(true);
+    setPlaying(false);
+    setProgress(1);
+  }, []);
+
+  const closeCall = useCallback(() => {
+    setCallOpen(false);
+    setIndex((current) => (current === CALL_SLIDE_INDEX ? current + 1 : current));
+    setProgress(0);
+    setPlaying(true);
+  }, []);
+
+  const next = useCallback(() => {
+    if (index === CALL_SLIDE_INDEX) {
+      openCall();
+      return;
+    }
+    goTo(index + 1);
+  }, [goTo, index, openCall]);
+
   const previous = useCallback(() => goTo(index - 1), [goTo, index]);
 
   useEffect(() => {
-    if (!playing) {
+    if (!playing || callOpen) {
       return;
     }
 
@@ -54,6 +80,10 @@ export default function VegetableSlideshow() {
     const timer = window.setInterval(() => {
       const elapsed = Date.now() - startedAt;
       if (elapsed >= SLIDE_DURATION_MS) {
+        if (index === CALL_SLIDE_INDEX) {
+          openCall();
+          return;
+        }
         setIndex((current) => (current + 1) % SLIDES.length);
         setProgress(0);
         return;
@@ -62,10 +92,18 @@ export default function VegetableSlideshow() {
     }, 100);
 
     return () => window.clearInterval(timer);
-  }, [playing, index]);
+  }, [playing, index, callOpen, openCall]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (callOpen) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          closeCall();
+        }
+        return;
+      }
+
       if (event.key === "ArrowRight") {
         event.preventDefault();
         next();
@@ -80,7 +118,7 @@ export default function VegetableSlideshow() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [next, previous]);
+  }, [callOpen, closeCall, next, previous]);
 
   const slide = SLIDES[index];
 
@@ -142,36 +180,56 @@ export default function VegetableSlideshow() {
         >
           <ChevronRight className="size-5" />
         </button>
+
+        {callOpen ? <VegetableCall onClose={closeCall} /> : null}
       </div>
 
       <div className="flex flex-col gap-3">
         <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
           <div
             className="h-full bg-primary transition-[width] duration-100 ease-linear"
-            style={{ width: playing ? `${progress * 100}%` : "0%" }}
+            style={{ width: callOpen ? "100%" : playing ? `${progress * 100}%` : "0%" }}
           />
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-2">
           {SLIDES.map((item, slideIndex) => (
-            <button
-              key={item.src}
-              type="button"
-              onClick={() => goTo(slideIndex)}
-              aria-label={`Go to slide ${slideIndex + 1}: ${item.title}`}
-              aria-current={slideIndex === index}
-              className={cn(
-                "h-14 w-20 overflow-hidden rounded-md border-2 bg-muted/30 p-1 transition-colors",
-                slideIndex === index ? "border-primary" : "border-transparent hover:border-border",
-              )}
-            >
-              <img
-                src={item.src}
-                alt=""
-                className="h-full w-full rounded-sm object-contain"
-                loading="lazy"
-              />
-            </button>
+            <Fragment key={item.src}>
+              {slideIndex === CALL_SLIDE_INDEX + 1 ? (
+                <button
+                  type="button"
+                  onClick={openCall}
+                  aria-label="Open the location advisor call demo"
+                  aria-pressed={callOpen}
+                  className={cn(
+                    "flex h-14 w-20 flex-col items-center justify-center gap-1 rounded-md border-2 bg-muted/30 text-muted-foreground transition-colors hover:border-border hover:text-foreground",
+                    callOpen ? "border-primary text-foreground" : "border-transparent",
+                  )}
+                >
+                  <Phone className="size-4" />
+                  <span className="font-medium text-[10px] leading-none">Call</span>
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => goTo(slideIndex)}
+                aria-label={`Go to slide ${slideIndex + 1}: ${item.title}`}
+                aria-current={slideIndex === index}
+                className={cn(
+                  "h-14 w-20 overflow-hidden rounded-md border-2 bg-muted/30 p-1 transition-colors",
+                  slideIndex === index
+                    ? "border-primary"
+                    : "border-transparent hover:border-border",
+                )}
+              >
+                <img
+                  src={item.src}
+                  alt=""
+                  className="h-full w-full rounded-sm object-contain"
+                  loading="lazy"
+                />
+              </button>
+            </Fragment>
           ))}
         </div>
       </div>
