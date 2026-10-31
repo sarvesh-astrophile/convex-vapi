@@ -8,7 +8,7 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 import { BuilderChat } from "@/components/vapi-builder/builder-chat";
 import { VapiAssistantDraftPanel } from "@/components/vapi-builder/draft-panel";
 
-export const Route = createFileRoute("/_auth/agents/$assistantId")({
+export const Route = createFileRoute("/agents/$assistantId")({
   component: VapiAssistantBuilderPage,
 });
 

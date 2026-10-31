@@ -2,16 +2,12 @@ import { Link } from "@tanstack/react-router";
 
 export default function Header() {
   const links = [
-    { to: "/", label: "Home", badge: null },
-    { to: "/agents", label: "Voice agents", badge: null },
-    { to: "/voice", label: "Dialer", badge: null },
-    { to: "/calls", label: "Call history", badge: null },
-    { to: "/sarvam/agents", label: "Sarvam", badge: null },
     { to: "/paytm-pos-failure", label: "Paytm POS", badge: 1 },
     { to: "/auto", label: "Auto", badge: 2 },
     { to: "/sales-dip", label: "Sales dip", badge: 3 },
     { to: "/vegetable", label: "Vegetable", badge: 4 },
-    { to: "/dashboard", label: "Dashboard", badge: null },
+    { to: "/agents", label: "Voice agent builder", badge: null },
+    { to: "/sarvam/agents", label: "Sarvam", badge: null },
   ] as const;
 
   return (

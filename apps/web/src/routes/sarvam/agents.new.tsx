@@ -6,7 +6,7 @@ import { AgentForm } from "@/components/agent-form";
 import { useActiveWorkspace } from "@/hooks/use-active-workspace";
 import { DEFAULT_AGENT_CONFIG } from "@/lib/agent-defaults";
 
-export const Route = createFileRoute("/_auth/sarvam/agents/new")({
+export const Route = createFileRoute("/sarvam/agents/new")({
   component: NewAgentPage,
 });
 

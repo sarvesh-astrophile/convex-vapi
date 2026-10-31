@@ -20,7 +20,7 @@ import { useActiveWorkspace } from "@/hooks/use-active-workspace";
 import { errorMessage } from "@/lib/errors";
 import { formatCost, formatDuration, formatTimestamp } from "@/lib/format";
 
-export const Route = createFileRoute("/_auth/voice")({
+export const Route = createFileRoute("/voice")({
   component: VapiVoicePage,
 });
 

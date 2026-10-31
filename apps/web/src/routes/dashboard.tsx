@@ -5,7 +5,7 @@ import { useQuery } from "convex/react";
 import McpConnections from "@/components/mcp-connections";
 import UserMenu from "@/components/user-menu";
 
-export const Route = createFileRoute("/_auth/dashboard")({
+export const Route = createFileRoute("/dashboard")({
   component: DashboardContent,
 });
 

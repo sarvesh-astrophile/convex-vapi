@@ -18,7 +18,7 @@ import { useCloudflareVoice } from "@/hooks/use-cloudflare-voice";
 import { formatDuration, formatTimestamp } from "@/lib/format";
 import type { ConnectionState, LiveTurn, PipelineLatency, TurnLatency } from "@/lib/voice-types";
 
-export const Route = createFileRoute("/_auth/sarvam/voice")({
+export const Route = createFileRoute("/sarvam/voice")({
   validateSearch: (search: Record<string, unknown>): { agent?: string } => {
     if (typeof search.agent === "string" && search.agent.length > 0) {
       return { agent: search.agent };

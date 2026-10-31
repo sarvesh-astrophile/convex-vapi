@@ -17,7 +17,7 @@ import { useActiveWorkspace } from "@/hooks/use-active-workspace";
 import { DEFAULT_AGENT_CONFIG } from "@/lib/agent-defaults";
 import { formatTimestamp } from "@/lib/format";
 
-export const Route = createFileRoute("/_auth/sarvam/agents/$agentId")({
+export const Route = createFileRoute("/sarvam/agents/$agentId")({
   component: AgentDetailPage,
 });
 

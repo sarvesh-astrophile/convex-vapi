@@ -21,9 +21,9 @@ export default function SignUpForm({
 
   const form = useForm({
     defaultValues: {
-      email: "",
-      password: "",
-      name: "",
+      email: "user@example.com",
+      password: "user@example.com",
+      name: "Demo User",
     },
     onSubmit: async ({ value }) => {
       await authClient.signUp.email(

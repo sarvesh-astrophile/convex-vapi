@@ -14,7 +14,7 @@ import { Loader2, Plus } from "lucide-react";
 import { useActiveWorkspace, useWorkspaces } from "@/hooks/use-active-workspace";
 import { formatTimestamp } from "@/lib/format";
 
-export const Route = createFileRoute("/_auth/sarvam/agents/")({
+export const Route = createFileRoute("/sarvam/agents/")({
   component: AgentsPage,
 });
 

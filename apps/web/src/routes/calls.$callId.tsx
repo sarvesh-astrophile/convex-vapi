@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { errorMessage } from "@/lib/errors";
 import { formatCost, formatDuration, formatTimestamp } from "@/lib/format";
 
-export const Route = createFileRoute("/_auth/calls/$callId")({
+export const Route = createFileRoute("/calls/$callId")({
   component: VapiCallDetailPage,
 });
 

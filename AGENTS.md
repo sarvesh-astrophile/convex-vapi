@@ -70,19 +70,17 @@ kelasa/
 │       │   └── routes/            # File-based TanStack routes
 │       │       ├── __root.tsx     # Root layout, auth provider, devtools
 │       │       ├── index.tsx      # Home page and API health check
-│       │       ├── _auth/         # Protected route group
-│       │       │   ├── route.tsx  # Auth-gated layout with sign-in/up fallback
-│       │       │   ├── agents.index.tsx   # Vapi assistant builder list
-│       │       │   ├── agents.$assistantId.tsx  # Chat + draft + publish
-│       │       │   ├── dashboard.tsx  # Workspace dashboard (members/invites)
-│       │       │   ├── voice.tsx  # Vapi outbound dialer
-│       │       │   ├── calls.index.tsx    # Vapi call history
-│       │       │   ├── calls.$callId.tsx  # Vapi call detail
-│       │       │   └── sarvam/    # Separate Sarvam/Cloudflare pages
-│       │       │       ├── route.tsx      # Sarvam section layout
-│       │       │       ├── agents.index.tsx / agents.new.tsx / agents.$agentId.tsx
-│       │       │       ├── voice.tsx      # Browser call on the Sarvam runtime
-│       │       │       └── calls.index.tsx / calls.$callId.tsx
+│       │       ├── agents.index.tsx   # Vapi assistant builder list
+│       │       ├── agents.$assistantId.tsx  # Chat + draft + publish
+│       │       ├── dashboard.tsx  # Workspace dashboard (members/invites)
+│       │       ├── voice.tsx  # Vapi outbound dialer
+│       │       ├── calls.index.tsx    # Vapi call history
+│       │       ├── calls.$callId.tsx  # Vapi call detail
+│       │       ├── sarvam/    # Separate Sarvam/Cloudflare pages
+│       │       │   ├── route.tsx      # Sarvam section layout
+│       │       │   ├── agents.index.tsx / agents.new.tsx / agents.$agentId.tsx
+│       │       │   ├── voice.tsx      # Browser call on the Sarvam runtime
+│       │       │   └── calls.index.tsx / calls.$callId.tsx
 │       │       └── api/           # Server route handlers
 │       │           └── auth/      # Better Auth proxy route
 │       │               └── $.ts    # Proxies Better Auth requests to Convex

@@ -21,8 +21,8 @@ export default function SignInForm({
 
   const form = useForm({
     defaultValues: {
-      email: "",
-      password: "",
+      email: "user@example.com",
+      password: "user@example.com",
     },
     onSubmit: async ({ value }) => {
       await authClient.signIn.email(

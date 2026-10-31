@@ -17,7 +17,7 @@ import { useActiveWorkspace } from "@/hooks/use-active-workspace";
 import { errorMessage } from "@/lib/errors";
 import { formatTimestamp } from "@/lib/format";
 
-export const Route = createFileRoute("/_auth/agents/")({
+export const Route = createFileRoute("/agents/")({
   component: VapiAssistantsPage,
 });
 

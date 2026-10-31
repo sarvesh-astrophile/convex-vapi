@@ -1,6 +1,6 @@
 import { Link, Outlet, createFileRoute } from "@tanstack/react-router";
 
-export const Route = createFileRoute("/_auth/sarvam")({
+export const Route = createFileRoute("/sarvam")({
   component: SarvamLayout,
 });
 

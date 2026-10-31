@@ -36,7 +36,7 @@ Vapi path, bridge app, and bridge Alchemy stack have since been deleted.
 
 ```text
 Browser
-  └─ /voice (apps/web/src/routes/_auth/voice.tsx)
+  └─ /voice (apps/web/src/routes/voice.tsx)
        └─ use-vapi-call.ts
             └─ Vapi Web SDK ── WebRTC ── Vapi
                                          ├─ transcriber: custom-transcriber
@@ -51,7 +51,7 @@ Relevant files:
 
 | Area               | File                                                   |
 | ------------------ | ------------------------------------------------------ |
-| Voice UI           | `apps/web/src/routes/_auth/voice.tsx`                  |
+| Voice UI           | `apps/web/src/routes/voice.tsx`                  |
 | Vapi client hook   | `apps/web/src/hooks/use-vapi-call.ts`                  |
 | Builder            | `apps/web/src/components/agent-form.tsx`               |
 | Agent config       | `packages/backend/convex/lib/agentConfig.ts`           |

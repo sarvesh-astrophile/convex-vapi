@@ -13,7 +13,7 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 
 import { formatDuration, formatTimestamp } from "@/lib/format";
 
-export const Route = createFileRoute("/_auth/sarvam/calls/$callId")({
+export const Route = createFileRoute("/sarvam/calls/$callId")({
   component: CallDetailPage,
 });
 
