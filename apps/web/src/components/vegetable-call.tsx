@@ -15,13 +15,13 @@ const VEGETABLE_COPY: IphoneCallCopy = {
   kicker: "Paytm POS · Location advisor",
   liveKicker: "Live voice · Vapi",
   callerName: PAYTM_VEGETABLE_ADVISOR_ASSISTANT_NAME,
-  ringingHint: "Answer to ask which selling location performed best.",
+  ringingHint: "Answer to ask Paytm which selling location performed best.",
   liveHint: "Ask things like “which location sold the most in the last 30 days?”",
   endedHint: "Answer again to keep the conversation going.",
 };
 
 /**
- * End-of-slide-4 moment for the `/vegetable` deck: the Paytm iPhone mockup,
+ * End-of-slide-2 moment for the `/vegetable` deck: the Paytm iPhone mockup,
  * hosting a live Vapi call with the Location Advisor.
  */
 export function VegetableCall({ onClose }: { onClose: () => void }) {
@@ -49,11 +49,11 @@ export function VegetableCall({ onClose }: { onClose: () => void }) {
         </button>
 
         <div className="auto-advisor-copy">
-          <div className="eyebrow">Slide 4 · Live concept</div>
-          <h2 id="vegetable-call-title">Ask about the best location</h2>
+          <div className="eyebrow">Slide 2 · Live concept</div>
+          <h2 id="vegetable-call-title">Ask Paytm about your sales</h2>
           <p>
-            The vendor sees the top location recommendation. Answer the phone to ask the Location
-            Advisor which spot performed best and why.
+            The vendor asks Paytm for help. Answer the phone to ask the Location Advisor which
+            selling locations have performed best and why.
           </p>
           <div className="call-script">
             <strong>{PAYTM_VEGETABLE_ADVISOR_ASSISTANT_NAME}</strong>
@@ -62,7 +62,7 @@ export function VegetableCall({ onClose }: { onClose: () => void }) {
             chosen.
           </div>
           <button type="button" className="auto-advisor-skip" onClick={onClose}>
-            Skip to slide 5 <ArrowRight size={14} />
+            Skip to slide 3 <ArrowRight size={14} />
           </button>
           <div className="auto-advisor-hint">
             The phone uses Vapi in your browser and may ask for microphone access. The slideshow

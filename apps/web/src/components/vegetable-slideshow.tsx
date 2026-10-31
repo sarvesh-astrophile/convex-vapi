@@ -34,7 +34,7 @@ const SLIDES = [
 
 const SLIDE_DURATION_MS = 5000;
 /** Zero-based index of the slide that ends with the live location-advisor demo. */
-const CALL_SLIDE_INDEX = 3;
+const CALL_SLIDE_INDEX = 1;
 
 export default function VegetableSlideshow() {
   const [index, setIndex] = useState(0);
