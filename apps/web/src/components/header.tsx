@@ -10,6 +10,7 @@ export default function Header() {
     { to: "/paytm-pos-failure", label: "Paytm POS", badge: 1 },
     { to: "/auto", label: "Auto", badge: 2 },
     { to: "/sales-dip", label: "Sales dip", badge: 3 },
+    { to: "/vegetable", label: "Vegetable", badge: 4 },
     { to: "/dashboard", label: "Dashboard", badge: null },
   ] as const;
 
